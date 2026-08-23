@@ -21,6 +21,26 @@ All architectural decisions below have been accepted — see [docs/adrs/Accepted
 - [docs/adrs/](docs/adrs/) — Architectural Decision Records (ADRs). See [docs/adrs/README.md](docs/adrs/README.md) for the process.
 - [docs/requirements.md](docs/requirements.md) — Functional requirements derived from the ADRs, each with a priority (Must/Should/Nice to Have) and acceptance criteria (filled in where known). Update this alongside the ADRs as decisions evolve.
 
+## Documentation Standards (Dart/Flutter code)
+
+- **Tool**: [`dartdoc`](https://dart.dev/tools/dartdoc) (the `dart doc` command, bundled with the Dart SDK) is the code documentation tool for this project — not Doxygen, which has no native Dart support. Generate docs from within `app/` with `dart doc .`; output goes to `app/doc/api` (gitignored — generated, not committed; regenerate on demand).
+- **Every public class, method, getter/setter, field, and top-level function must have a `///` doc comment.** This is enforced by the `public_member_api_docs` lint, enabled in `app/analysis_options.yaml` — `flutter analyze` will flag any public member missing one. Private (`_`-prefixed) members and `@override` members (which inherit the superclass's doc) are exempt.
+- **Every doc comment must include a `UREQS:` line** tracing the member to the requirement(s) in [docs/requirements.md](docs/requirements.md) it implements, e.g.:
+
+  ```dart
+  /// Matches a scanned product to an item on the active shopping list.
+  ///
+  /// Returns the best-matching item, or `null` if no candidate exceeds the
+  /// confidence threshold.
+  ///
+  /// UREQS: LIST-2, LIST-3
+  ShoppingListItem? matchProduct(Product product) { ... }
+  ```
+
+  If a member genuinely doesn't trace to any requirement (e.g., a pure utility, a framework-required override, scaffold placeholder code), write `UREQS: none` plus a short reason — the point is that the absence of a requirement link is a deliberate, visible statement, not a silent gap a reviewer has to guess about.
+- **Why a plain `UREQS:` line and not a custom tag**: dartdoc (unlike Doxygen) has no mechanism for custom structured tags (no `@requirement`-style commands) — it renders whatever Markdown is in the `///` comment as-is. A conventionally-labeled line is the simplest thing that (a) reads fine in generated docs, (b) is trivially greppable (`grep -rn "UREQS:" app/lib`), and (c) needs no tooling investment before there's a real codebase to justify it.
+- **Enforcement scope, honestly stated**: the analyzer lint guarantees *a* doc comment exists; it does not check that a `UREQS:` line is present or that the IDs it names are real. That check is a code-review responsibility for now. If missing/bogus UREQS references become a recurring problem once there's substantial code, consider a small script that greps all `.dart` files for `UREQS:` lines and validates each ID against `docs/requirements.md` — don't build that ahead of need.
+
 ## Workflow
 
 - Architectural decisions are recorded as ADRs before/alongside implementation, not after the fact.

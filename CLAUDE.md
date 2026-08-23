@@ -20,6 +20,7 @@ All architectural decisions below have been accepted — see [docs/adrs/Accepted
 
 - [docs/adrs/](docs/adrs/) — Architectural Decision Records (ADRs). See [docs/adrs/README.md](docs/adrs/README.md) for the process.
 - [docs/requirements.md](docs/requirements.md) — Functional requirements derived from the ADRs, each with a priority (Must/Should/Nice to Have) and acceptance criteria (filled in where known). Update this alongside the ADRs as decisions evolve.
+- [docs/design/](docs/design/) — Design notes that don't rise to the level of an ADR (interim/temporary setups, implementation notes tied to an accepted ADR, etc.). Currently: [Hooper local dev backend](docs/design/hooper-local-dev-backend.md), describing the temporary Raspberry Pi + VM + Firebase Local Emulator Suite setup standing in for the real cloud backend (ADR 0006) during early development.
 
 ## Documentation Standards (Dart/Flutter code)
 
@@ -56,6 +57,7 @@ All architectural decisions below have been accepted — see [docs/adrs/Accepted
 - Requirements: [docs/requirements.md](docs/requirements.md)
 - ADR index/process: [docs/adrs/README.md](docs/adrs/README.md)
 - ADR template: [docs/adrs/template.md](docs/adrs/template.md)
+- Design notes: [docs/design/](docs/design/) (see [Hooper local dev backend](docs/design/hooper-local-dev-backend.md))
 - Accepted ADRs:
   - [0001: Mobile App Framework](docs/adrs/Accepted/0001-mobile-app-framework.md)
   - [0002: Product Label Capture & Recognition Method](docs/adrs/Accepted/0002-product-label-capture-method.md)

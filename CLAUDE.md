@@ -1,0 +1,63 @@
+# NutManagerApp
+
+See [README.md](README.md) for the human-facing project overview and development environment setup instructions.
+
+## Project
+
+NutManagerApp is a mobile app, part of a larger ecosystem with cloud storage/processing, that lets a user scan a product label, classify the product, and match it to a shopping list.
+
+- **Cloud side:** stores nutritional information, recipes, and shopping lists for a user and their household/family; also maintains historical pricing data shared/crowdsourced across users.
+- **Mobile side:** downloads the shopping list ahead of a shopping trip, then must scan/categorize items and match them to the shopping list **offline**, since in-store connectivity is expected to be spotty. Also captures item pricing and coupons while shopping.
+- **Platforms:** Android prototype first, iOS planned to follow; leaning toward Flutter for cross-platform client code (see ADR 0001).
+- **On-device AI:** product classification/matching must run on the phone itself, not the cloud, to satisfy the offline requirement (see ADRs 0002-0004).
+- **Pricing & coupons:** capturing shelf/hand-marked prices and coupons, matching coupons to products, and comparing prices across stores by locality using shared historical data (see ADRs 0008-0011).
+- **Cross-user data sharing:** a general scope/governance model (private vs. geo/store-scoped vs. global sharing) covers all crowdsourced data — store-specific pricing and barcode data are geo-scoped, while recipes are shared globally since they aren't tied to a location (see ADRs 0022-0024). Recipe sharing raises copyright/liability questions that need real legal review before launch (ADR 0024).
+- **Nutrition planning & tracking:** users create a nutrition plan (min/max/range targets per nutrient) and track biometric goals (weight, blood pressure, blood sugar, etc.) per household member; recipes are created/imported and their nutrient content computed from ingredients, adjusted for cooking method. Unlike in-store shopping, this subsystem assumes general connectivity and is cloud-first rather than offline-first (see ADRs 0014-0019). Health tracker integration (e.g., Apple Watch) is a long-term goal designed for now but not built yet (ADR 0018). Health data privacy/HIPAA implications are tracked separately (ADR 0020), including the planned long-term requirement to share data with a user's healthcare provider (ADR 0021).
+
+All architectural decisions below have been accepted — see [docs/adrs/Accepted/](docs/adrs/Accepted/).
+
+## Documentation
+
+- [docs/adrs/](docs/adrs/) — Architectural Decision Records (ADRs). See [docs/adrs/README.md](docs/adrs/README.md) for the process.
+- [docs/requirements.md](docs/requirements.md) — Functional requirements derived from the ADRs, each with a priority (Must/Should/Nice to Have) and acceptance criteria (filled in where known). Update this alongside the ADRs as decisions evolve.
+
+## Workflow
+
+- Architectural decisions are recorded as ADRs before/alongside implementation, not after the fact.
+  - New ADRs start in `docs/adrs/Proposed/`.
+  - Once decided, they move to `docs/adrs/Accepted/` or `docs/adrs/Rejected/` (see the ADR README for the full process).
+- Use `docs/adrs/template.md` as the starting point for any new ADR.
+- Requirements belong to accepted decisions, not proposed ones: derive/update [docs/requirements.md](docs/requirements.md) as part of accepting an ADR (moving it into `docs/adrs/Accepted/`), not while it's still in `Proposed/`.
+  - Note: the initial batch of requirements (ADRs 0001-0012) was derived while those ADRs were still Proposed, ahead of this rule being adopted. No issues have surfaced from that, so it's being left as-is rather than reworked — but this is the exception, not the pattern to repeat.
+- Keep `docs/requirements.md` up to date as the project progresses — when an ADR is added, superseded, or its scope changes, revisit the requirements it produced.
+
+## Reference Documents
+
+- Requirements: [docs/requirements.md](docs/requirements.md)
+- ADR index/process: [docs/adrs/README.md](docs/adrs/README.md)
+- ADR template: [docs/adrs/template.md](docs/adrs/template.md)
+- Accepted ADRs:
+  - [0001: Mobile App Framework](docs/adrs/Accepted/0001-mobile-app-framework.md)
+  - [0002: Product Label Capture & Recognition Method](docs/adrs/Accepted/0002-product-label-capture-method.md)
+  - [0003: On-Device AI Runtime](docs/adrs/Accepted/0003-on-device-ai-runtime.md)
+  - [0004: Product-to-Shopping-List Matching Strategy](docs/adrs/Accepted/0004-product-shopping-list-matching-strategy.md)
+  - [0005: Offline-First Local Storage & Sync](docs/adrs/Accepted/0005-offline-local-storage-and-sync.md)
+  - [0006: Cloud Backend Platform](docs/adrs/Accepted/0006-cloud-backend-platform.md)
+  - [0007: Cloud-Mobile Sync/API Protocol](docs/adrs/Accepted/0007-cloud-mobile-sync-api-protocol.md)
+  - [0008: Price Label Capture Method](docs/adrs/Accepted/0008-price-label-capture-method.md)
+  - [0009: Coupon Handling & Matching](docs/adrs/Accepted/0009-coupon-handling-and-matching.md)
+  - [0010: Cross-Store Price Comparison by Locality](docs/adrs/Accepted/0010-cross-store-price-comparison.md)
+  - [0011: Cloud Historical Pricing Data & Cross-User Sharing](docs/adrs/Accepted/0011-cloud-historical-pricing-and-sharing.md)
+  - [0012: Barcode Matching Database](docs/adrs/Accepted/0012-barcode-matching-database.md)
+  - [0013: Nutrition Label Reading & Goal Matching](docs/adrs/Accepted/0013-nutrition-label-reading-and-goal-matching.md)
+  - [0014: Nutrition Plan & Biometric Goal Data Model](docs/adrs/Accepted/0014-nutrition-plan-and-biometric-goal-model.md)
+  - [0015: Cloud/Local Processing Split for Nutrition Planning & Tracking](docs/adrs/Accepted/0015-cloud-local-split-nutrition-planning.md)
+  - [0016: Recipe Creation, Import & Ingredient Nutrient Computation](docs/adrs/Accepted/0016-recipe-creation-import-and-nutrient-computation.md)
+  - [0017: Cooking Method Effects on Nutritional Value](docs/adrs/Accepted/0017-cooking-method-nutrient-effects.md)
+  - [0018: Health & Fitness Tracker Integration](docs/adrs/Accepted/0018-health-fitness-tracker-integration.md)
+  - [0019: Biometric & Intake Tracking History and Multi-Source Reconciliation](docs/adrs/Accepted/0019-tracking-history-and-source-reconciliation.md)
+  - [0020: HIPAA & Health Data Privacy Compliance](docs/adrs/Accepted/0020-health-data-privacy-and-hipaa.md)
+  - [0021: Healthcare Provider Data Sharing Interface](docs/adrs/Accepted/0021-healthcare-provider-data-sharing-interface.md)
+  - [0022: Cross-User Data Sharing — Scope & Governance Model](docs/adrs/Accepted/0022-cross-user-data-sharing-scope-model.md)
+  - [0023: Recipe Sharing & Discovery](docs/adrs/Accepted/0023-recipe-sharing-and-discovery.md)
+  - [0024: Recipe Copyright & Contributor Liability](docs/adrs/Accepted/0024-recipe-copyright-and-contributor-liability.md)

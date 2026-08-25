@@ -21,6 +21,8 @@ All architectural decisions below have been accepted — see [docs/adrs/Accepted
 - [docs/adrs/](docs/adrs/) — Architectural Decision Records (ADRs). See [docs/adrs/README.md](docs/adrs/README.md) for the process.
 - [docs/requirements.md](docs/requirements.md) — Functional requirements derived from the ADRs, each with a priority (Must/Should/Nice to Have) and acceptance criteria (filled in where known). Update this alongside the ADRs as decisions evolve.
 - [docs/design/](docs/design/) — Design notes that don't rise to the level of an ADR (interim/temporary setups, implementation notes tied to an accepted ADR, etc.). Currently: [Hooper local dev backend](docs/design/hooper-local-dev-backend.md), describing the temporary Raspberry Pi + VM + Firebase Local Emulator Suite setup standing in for the real cloud backend (ADR 0006) during early development.
+- [docs/development-plan.md](docs/development-plan.md) — The four-phase development roadmap: every requirement in docs/requirements.md assigned to a phase (scope/sequencing only). Update the Traceability Summary whenever a requirement is added.
+- [docs/test-plan.md](docs/test-plan.md) — The test plan: equipment/environment needed, per-phase setup, test cases (automated `AT#.#` / manual `MT#.#`), requirement-to-test-case traceability, and exit criteria. Keep this and development-plan.md's phase scope in sync when either changes.
 
 ## Documentation Standards (Dart/Flutter code)
 
@@ -55,6 +57,8 @@ All architectural decisions below have been accepted — see [docs/adrs/Accepted
 ## Reference Documents
 
 - Requirements: [docs/requirements.md](docs/requirements.md)
+- Development plan (4 phases, scope/sequencing): [docs/development-plan.md](docs/development-plan.md)
+- Test plan (equipment, setup, test cases, exit criteria): [docs/test-plan.md](docs/test-plan.md)
 - ADR index/process: [docs/adrs/README.md](docs/adrs/README.md)
 - ADR template: [docs/adrs/template.md](docs/adrs/template.md)
 - Design notes: [docs/design/](docs/design/) (see [Hooper local dev backend](docs/design/hooper-local-dev-backend.md))

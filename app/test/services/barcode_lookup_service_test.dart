@@ -19,7 +19,7 @@ void main() {
     });
 
     test('resolves a known seeded barcode to the correct product', () async {
-      final result = await service.lookup('100000000004');
+      final result = await service.lookup('100000000045');
       expect(result, isNotNull);
       expect(result!.name, 'Cheerios Cereal');
     });

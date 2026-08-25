@@ -41,41 +41,56 @@ void main() {
       expect(result.candidates.single.score, 1.0);
     });
 
-    test('a single weak candidate below the confident threshold is ambiguous', () {
-      final result = service.match(
-        productName: 'Whole Milk, 1 Gal',
-        productCategory: 'dairy',
-        pendingItems: [_item(1, 'Milk', 'dairy')],
-      );
+    test(
+      'a single weak candidate below the confident threshold is ambiguous',
+      () {
+        final result = service.match(
+          productName: 'Whole Milk, 1 Gal',
+          productCategory: 'dairy',
+          pendingItems: [_item(1, 'Milk', 'dairy')],
+        );
 
-      expect(result.outcome, MatchOutcome.ambiguous);
-      expect(result.candidates, hasLength(1));
-      expect(result.candidates.first.score, lessThan(MatchingService.confidentThreshold));
-    });
+        expect(result.outcome, MatchOutcome.ambiguous);
+        expect(result.candidates, hasLength(1));
+        expect(
+          result.candidates.first.score,
+          lessThan(MatchingService.confidentThreshold),
+        );
+      },
+    );
 
-    test('two high-scoring candidates within the ambiguity margin stay ambiguous', () {
-      final result = service.match(
-        productName: 'Whole Milk',
-        productCategory: 'dairy',
-        pendingItems: [_item(1, 'Whole Milk', 'dairy'), _item(2, 'Whole Milk', 'dairy')],
-      );
+    test(
+      'two high-scoring candidates within the ambiguity margin stay ambiguous',
+      () {
+        final result = service.match(
+          productName: 'Whole Milk',
+          productCategory: 'dairy',
+          pendingItems: [
+            _item(1, 'Whole Milk', 'dairy'),
+            _item(2, 'Whole Milk', 'dairy'),
+          ],
+        );
 
-      expect(result.outcome, MatchOutcome.ambiguous);
-      expect(result.candidates, hasLength(2));
-      expect(result.candidates[0].score, 1.0);
-      expect(result.candidates[1].score, 1.0);
-    });
+        expect(result.outcome, MatchOutcome.ambiguous);
+        expect(result.candidates, hasLength(2));
+        expect(result.candidates[0].score, 1.0);
+        expect(result.candidates[1].score, 1.0);
+      },
+    );
 
-    test('same-category, no token overlap produces a weak fallback match (LIST-6)', () {
-      final result = service.match(
-        productName: 'Ground Coffee, Medium Roast',
-        productCategory: 'pantry',
-        pendingItems: [_item(1, 'Creamy Peanut Butter', 'pantry')],
-      );
+    test(
+      'same-category, no token overlap produces a weak fallback match (LIST-6)',
+      () {
+        final result = service.match(
+          productName: 'Ground Coffee, Medium Roast',
+          productCategory: 'pantry',
+          pendingItems: [_item(1, 'Creamy Peanut Butter', 'pantry')],
+        );
 
-      expect(result.outcome, MatchOutcome.ambiguous);
-      expect(result.candidates.single.score, 0.3);
-    });
+        expect(result.outcome, MatchOutcome.ambiguous);
+        expect(result.candidates.single.score, 0.3);
+      },
+    );
 
     test('no plausible candidate at all returns none', () {
       final result = service.match(

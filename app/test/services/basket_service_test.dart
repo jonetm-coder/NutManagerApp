@@ -24,52 +24,76 @@ void main() {
       await database.close();
     });
 
-    test('adding a scanned product matched to a list item marks it found', () async {
-      final cheerios = await (database.select(
-        database.catalogEntries,
-      )..where((row) => row.barcode.equals('100000000004'))).getSingle();
-      final cheeriosItem = service.pendingItems.firstWhere(
-        (item) => item.name == 'Cheerios Cereal',
-      );
+    test(
+      'adding a scanned product matched to a list item marks it found',
+      () async {
+        final cheerios = await (database.select(
+          database.catalogEntries,
+        )..where((row) => row.barcode.equals('100000000045'))).getSingle();
+        final cheeriosItem = service.pendingItems.firstWhere(
+          (item) => item.name == 'Cheerios Cereal',
+        );
 
-      await service.addFromMatch(product: cheerios, matchedItem: cheeriosItem);
+        await service.addFromMatch(
+          product: cheerios,
+          matchedItem: cheeriosItem,
+        );
 
-      expect(service.basketEntries.map((e) => e.productName), contains('Cheerios Cereal'));
-      expect(
-        service.listItems.firstWhere((i) => i.id == cheeriosItem.id).status,
-        ListItemStatus.found,
-      );
-      expect(service.pendingItems.any((i) => i.id == cheeriosItem.id), isFalse);
-    });
+        expect(
+          service.basketEntries.map((e) => e.productName),
+          contains('Cheerios Cereal'),
+        );
+        expect(
+          service.listItems.firstWhere((i) => i.id == cheeriosItem.id).status,
+          ListItemStatus.found,
+        );
+        expect(
+          service.pendingItems.any((i) => i.id == cheeriosItem.id),
+          isFalse,
+        );
+      },
+    );
 
-    test('adding a scanned product with no list match still adds to the basket', () async {
-      final onion = await (database.select(
-        database.catalogEntries,
-      )..where((row) => row.barcode.equals('100000000010'))).getSingle();
+    test(
+      'adding a scanned product with no list match still adds to the basket',
+      () async {
+        final onion = await (database.select(
+          database.catalogEntries,
+        )..where((row) => row.barcode.equals('100000000106'))).getSingle();
 
-      await service.addFromMatch(product: onion, matchedItem: null);
+        await service.addFromMatch(product: onion, matchedItem: null);
 
-      final entry = service.basketEntries.singleWhere((e) => e.productName == 'Yellow Onion');
-      expect(entry.listItemId, isNull);
-    });
+        final entry = service.basketEntries.singleWhere(
+          (e) => e.productName == 'Yellow Onion',
+        );
+        expect(entry.listItemId, isNull);
+      },
+    );
 
-    test('manual add creates a basket entry not linked to any list item (LIST-5)', () async {
-      await service.addManually('Fresh Basil');
+    test(
+      'manual add creates a basket entry not linked to any list item (LIST-5)',
+      () async {
+        await service.addManually('Fresh Basil');
 
-      final entry = service.basketEntries.singleWhere((e) => e.productName == 'Fresh Basil');
-      expect(entry.listItemId, isNull);
-      expect(entry.barcode, isNull);
-    });
+        final entry = service.basketEntries.singleWhere(
+          (e) => e.productName == 'Fresh Basil',
+        );
+        expect(entry.listItemId, isNull);
+        expect(entry.barcode, isNull);
+      },
+    );
 
     test('removing a list-linked basket entry returns the item to pending (LIST-4)', () async {
       final cheerios = await (database.select(
         database.catalogEntries,
-      )..where((row) => row.barcode.equals('100000000004'))).getSingle();
+      )..where((row) => row.barcode.equals('100000000045'))).getSingle();
       final cheeriosItem = service.pendingItems.firstWhere(
         (item) => item.name == 'Cheerios Cereal',
       );
       await service.addFromMatch(product: cheerios, matchedItem: cheeriosItem);
-      final entry = service.basketEntries.singleWhere((e) => e.productName == 'Cheerios Cereal');
+      final entry = service.basketEntries.singleWhere(
+        (e) => e.productName == 'Cheerios Cereal',
+      );
 
       await service.remove(entry);
 
@@ -80,15 +104,20 @@ void main() {
       );
     });
 
-    test('removing a manually-added entry does not touch any list item', () async {
-      await service.addManually('Fresh Basil');
-      final entry = service.basketEntries.singleWhere((e) => e.productName == 'Fresh Basil');
-      final listItemCountBefore = service.listItems.length;
+    test(
+      'removing a manually-added entry does not touch any list item',
+      () async {
+        await service.addManually('Fresh Basil');
+        final entry = service.basketEntries.singleWhere(
+          (e) => e.productName == 'Fresh Basil',
+        );
+        final listItemCountBefore = service.listItems.length;
 
-      await service.remove(entry);
+        await service.remove(entry);
 
-      expect(service.basketEntries.any((e) => e.id == entry.id), isFalse);
-      expect(service.listItems.length, listItemCountBefore);
-    });
+        expect(service.basketEntries.any((e) => e.id == entry.id), isFalse);
+        expect(service.listItems.length, listItemCountBefore);
+      },
+    );
   });
 }

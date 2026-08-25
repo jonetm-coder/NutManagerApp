@@ -36,8 +36,9 @@ class BasketService extends ChangeNotifier {
   /// pool [MatchingService] matches against.
   ///
   /// UREQS: LIST-2, LIST-3
-  List<ShoppingListItem> get pendingItems =>
-      _listItems.where((item) => item.status == ListItemStatus.pending).toList();
+  List<ShoppingListItem> get pendingItems => _listItems
+      .where((item) => item.status == ListItemStatus.pending)
+      .toList();
 
   /// Everything currently in the basket.
   ///

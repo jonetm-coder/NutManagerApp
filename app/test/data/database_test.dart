@@ -50,23 +50,26 @@ void main() {
       await second.close();
     });
 
-    test('a change made before closing is still there after reopening', () async {
-      final first = AppDatabase(NativeDatabase(dbFile));
-      final item = (await first.select(first.shoppingListItems).get()).first;
-      await (first.update(
-        first.shoppingListItems,
-      )..where((row) => row.id.equals(item.id))).write(
-        const ShoppingListItemsCompanion(status: Value(ListItemStatus.found)),
-      );
-      await first.close();
+    test(
+      'a change made before closing is still there after reopening',
+      () async {
+        final first = AppDatabase(NativeDatabase(dbFile));
+        final item = (await first.select(first.shoppingListItems).get()).first;
+        await (first.update(
+          first.shoppingListItems,
+        )..where((row) => row.id.equals(item.id))).write(
+          const ShoppingListItemsCompanion(status: Value(ListItemStatus.found)),
+        );
+        await first.close();
 
-      final second = AppDatabase(NativeDatabase(dbFile));
-      final reloaded = await (second.select(
-        second.shoppingListItems,
-      )..where((row) => row.id.equals(item.id))).getSingle();
-      expect(reloaded.status, ListItemStatus.found);
+        final second = AppDatabase(NativeDatabase(dbFile));
+        final reloaded = await (second.select(
+          second.shoppingListItems,
+        )..where((row) => row.id.equals(item.id))).getSingle();
+        expect(reloaded.status, ListItemStatus.found);
 
-      await second.close();
-    });
+        await second.close();
+      },
+    );
   });
 }

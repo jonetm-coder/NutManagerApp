@@ -12,24 +12,26 @@ import 'database.dart';
 ///
 /// A small, hand-picked dataset standing in for the real shared
 /// barcode/nutrition databases (ADR 0012/ADR 0013), which arrive in a
-/// later phase. Barcodes are obviously-fake 12-digit test values, not real
-/// UPCs — Phase 1 doesn't validate barcode checksums (that's ADR 0012
-/// territory), so any distinct string works as a lookup key.
+/// later phase. Barcodes are fake products but *are* checksum-valid
+/// UPC-A codes (not just arbitrary 12-digit strings) — Stage 2's barcode
+/// image fixtures are generated from these same codes, and a real UPC-A
+/// decoder (ML Kit included) validates the check digit, so an
+/// invalid-checksum code simply wouldn't decode.
 ///
 /// UREQS: SCAN-1, SYNC-1
 final List<CatalogEntriesCompanion> seedCatalog = [
-  _catalogEntry('100000000001', 'Whole Milk, 1 Gal', 'dairy'),
-  _catalogEntry('100000000002', '2% Milk, 1 Gal', 'dairy'),
-  _catalogEntry('100000000003', 'Chocolate Chip Cookies', 'snacks'),
-  _catalogEntry('100000000004', 'Cheerios Cereal', 'cereal'),
-  _catalogEntry('100000000005', 'Creamy Peanut Butter', 'pantry'),
-  _catalogEntry('100000000006', 'Sourdough Bread', 'bakery'),
-  _catalogEntry('100000000007', 'Large Eggs, Dozen', 'dairy'),
-  _catalogEntry('100000000008', 'Salted Butter', 'dairy'),
-  _catalogEntry('100000000009', 'Roma Tomatoes', 'produce'),
-  _catalogEntry('100000000010', 'Yellow Onion', 'produce'),
-  _catalogEntry('100000000011', 'Ground Coffee, Medium Roast', 'pantry'),
-  _catalogEntry('100000000012', 'Orange Juice, 64oz', 'beverages'),
+  _catalogEntry('100000000014', 'Whole Milk, 1 Gal', 'dairy'),
+  _catalogEntry('100000000021', '2% Milk, 1 Gal', 'dairy'),
+  _catalogEntry('100000000038', 'Chocolate Chip Cookies', 'snacks'),
+  _catalogEntry('100000000045', 'Cheerios Cereal', 'cereal'),
+  _catalogEntry('100000000052', 'Creamy Peanut Butter', 'pantry'),
+  _catalogEntry('100000000069', 'Sourdough Bread', 'bakery'),
+  _catalogEntry('100000000076', 'Large Eggs, Dozen', 'dairy'),
+  _catalogEntry('100000000083', 'Salted Butter', 'dairy'),
+  _catalogEntry('100000000090', 'Roma Tomatoes', 'produce'),
+  _catalogEntry('100000000106', 'Yellow Onion', 'produce'),
+  _catalogEntry('100000000113', 'Ground Coffee, Medium Roast', 'pantry'),
+  _catalogEntry('100000000120', 'Orange Juice, 64oz', 'beverages'),
 ];
 
 CatalogEntriesCompanion _catalogEntry(

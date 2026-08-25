@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Product-label scanning (SCAN-1/PLAT-3, ADR 0002/0003). -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
     <application
         android:label="nut_manager_app"
         android:name="${applicationName}"

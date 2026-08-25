@@ -171,7 +171,8 @@ class MatchingService {
       return intersection.length / union.length;
     }
 
-    if (_normalizeCategory(itemCategory) == _normalizeCategory(productCategory)) {
+    if (_normalizeCategory(itemCategory) ==
+        _normalizeCategory(productCategory)) {
       return _categoryFallbackScore;
     }
 

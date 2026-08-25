@@ -59,9 +59,7 @@ void main() {
       expect(result?.id, 1);
     });
 
-    testWidgets('"None of these" dismisses with no selection', (
-      tester,
-    ) async {
+    testWidgets('"None of these" dismisses with no selection', (tester) async {
       final candidates = [MatchCandidate(_item(1, 'Whole Milk'), 1.0)];
       ShoppingListItem? result = _item(999, 'sentinel');
 

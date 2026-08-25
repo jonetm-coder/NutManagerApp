@@ -1,30 +1,36 @@
 import 'package:flutter/material.dart';
 
 import '../data/database.dart';
+import '../services/barcode_lookup_service.dart';
 import '../services/basket_service.dart';
 import 'manual_add_item_dialog.dart';
+import 'scan_screen.dart';
 
 /// The main Phase 1 screen: the shopping list and the basket.
-///
-/// Scanning (camera + ML Kit) is wired in during Stage 2; for now, items
-/// reach the basket only via manual add. The underlying
-/// [BasketService.addFromMatch] path is already implemented and tested —
-/// this screen just doesn't have a scan button to trigger it yet.
 ///
 /// This screen makes no network calls, satisfying the
 /// no-action-blocked-by-connectivity requirement by construction.
 ///
 /// UREQS: LIST-2, LIST-4, LIST-5, SYNC-3
 class ShoppingListScreen extends StatelessWidget {
-  /// Creates the screen backed by [basketService].
+  /// Creates the screen backed by [basketService] and [barcodeLookup].
   ///
-  /// UREQS: LIST-2, LIST-4, LIST-5
-  const ShoppingListScreen({super.key, required this.basketService});
+  /// UREQS: LIST-2, LIST-4, LIST-5, SCAN-1
+  const ShoppingListScreen({
+    super.key,
+    required this.basketService,
+    required this.barcodeLookup,
+  });
 
   /// The basket/list state this screen displays and mutates.
   ///
   /// UREQS: LIST-2, LIST-4, LIST-5
   final BasketService basketService;
+
+  /// Passed through to [ScanScreen] when the user taps "Scan".
+  ///
+  /// UREQS: SCAN-1
+  final BarcodeLookupService barcodeLookup;
 
   @override
   Widget build(BuildContext context) {
@@ -60,10 +66,23 @@ class ShoppingListScreen extends StatelessWidget {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _addManually(context),
-        tooltip: 'Add item',
-        child: const Icon(Icons.add),
+      floatingActionButton: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'scan',
+            onPressed: () => _scan(context),
+            icon: const Icon(Icons.qr_code_scanner),
+            label: const Text('Scan'),
+          ),
+          const SizedBox(width: 12),
+          FloatingActionButton(
+            heroTag: 'add',
+            onPressed: () => _addManually(context),
+            tooltip: 'Add item',
+            child: const Icon(Icons.add),
+          ),
+        ],
       ),
     );
   }
@@ -76,6 +95,17 @@ class ShoppingListScreen extends StatelessWidget {
     if (name != null) {
       await basketService.addManually(name);
     }
+  }
+
+  Future<void> _scan(BuildContext context) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => ScanScreen(
+          basketService: basketService,
+          barcodeLookup: barcodeLookup,
+        ),
+      ),
+    );
   }
 }
 

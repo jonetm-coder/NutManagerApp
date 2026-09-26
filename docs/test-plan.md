@@ -21,8 +21,8 @@ Equipment needed across all four phases. Each phase's section below states which
 
 | ID | Item | Notes |
 |---|---|---|
-| EQ-N1 | Home Wi-Fi network reachable by all test devices | Needed from Phase 2 on, so devices can reach Hooper. |
-| EQ-N2 | Hooper powered on, VM running, Firebase Local Emulator Suite started | Per [docs/design/hooper-local-dev-backend.md](design/hooper-local-dev-backend.md). Needed from Phase 2 on. **Phase 1 tests should be run with Hooper deliberately off or unreachable** — not just airplane mode on the device — to catch any accidental network dependency airplane mode alone might not reveal (e.g., a background sync attempt on a different network path). |
+| EQ-N1 | Tailscale installed and signed in to the owner's tailnet on every test device and the developer workstation | Needed from Phase 2 on, so devices can reach NutCache dev at `nutcache.tail37f114.ts.net`. Works on any network (home Wi-Fi, cellular, store Wi-Fi). |
+| EQ-N2 | NutCache dev instance up: Hooper powered on with the external drive mounted, `nutcache` VM running, Firebase Local Emulator Suite started | Per [docs/design/nutcache-dev-instance.md](design/nutcache-dev-instance.md). Needed from Phase 2 on. **Phase 1 tests should be run with NutCache deliberately unreachable** (Tailscale disconnected on the device, or the VM shut down) — not just airplane mode on the device — to catch any accidental network dependency airplane mode alone might not reveal (e.g., a background sync attempt on a different network path). |
 | EQ-N3 | Ability to toggle connectivity (airplane mode) on each test device on demand | Needed from Phase 1 on. |
 
 ### Physical Test Materials
@@ -39,7 +39,7 @@ Equipment needed across all four phases. Each phase's section below states which
 
 | ID | Item | Notes |
 |---|---|---|
-| EQ-A1 | At least two distinct household test accounts | Phase 2 on (cross-household isolation, CLOUD-2) and Phase 4 (recipe sharing, RSHARE-*). Created against Hooper's Firebase Auth emulator, not a real Firebase project. |
+| EQ-A1 | At least two distinct household test accounts | Phase 2 on (cross-household isolation, CLOUD-2) and Phase 4 (recipe sharing, RSHARE-*). Created against NutCache dev's Firebase Auth emulator, not a real Firebase project. |
 | EQ-A2 | A version-controlled seed product catalog (barcode → product, later + nutrition data) | Phase 1 on, extended in later phases. Lives alongside the app source so it's reviewable and reproducible, not assembled ad hoc per test run. |
 
 ### Software & Tooling
@@ -48,7 +48,7 @@ Equipment needed across all four phases. Each phase's section below states which
 |---|---|---|
 | EQ-S1 | Flutter/Android SDK dev environment | Per [README.md](../README.md) — already set up. |
 | EQ-S2 | `integration_test` Flutter package, configured in `app/` | Needed starting Phase 1 for on-device fixture-based tests (see AT1.2). Not yet added to `app/pubspec.yaml` as of this writing — add it when Phase 1 automated tests are implemented. |
-| EQ-S3 | Firebase Emulator Suite UI (bundled with the suite running on Hooper) | Phase 2 on — used to verify backend state directly, not just trust the app's own display of it. |
+| EQ-S3 | Firebase Emulator Suite UI (bundled with the suite; port 4000 on `nutcache`) | Phase 2 on — used to verify backend state directly, not just trust the app's own display of it. |
 | EQ-S4 | A barcode-image generation tool or library | Phase 1 — for producing EQ-P1's fixtures. Specific library TBD when Phase 1 fixtures are built; any tool producing standard UPC-A/EAN-13 images is sufficient. |
 
 ---
@@ -60,7 +60,7 @@ Equipment needed across all four phases. Each phase's section below states which
 ### Setup
 
 - Equipment: EQ-D1, EQ-N3, EQ-P1, EQ-P2, EQ-A2, EQ-S2, EQ-S4.
-- Hooper (EQ-N2) is **not** used in this phase — leave it off or firewalled from the test device to make sure nothing in Phase 1 accidentally depends on it.
+- NutCache (EQ-N2) is **not** used in this phase — disconnect Tailscale on the test device or shut the `nutcache` VM down, to make sure nothing in Phase 1 accidentally depends on it. Being off the home Wi-Fi is not enough, since Tailscale reaches NutCache from any network.
 - Seed catalog (EQ-A2) populated with entries for every EQ-P1 fixture code plus the EQ-P2 real products, including at least one deliberate near-duplicate pair (e.g., "whole milk" and "2% milk") to exercise ambiguous matching.
 - Barcode fixtures (EQ-P1) generated once via EQ-S4 and committed to `app/test/fixtures/barcodes/`; printed copies made from the same files.
 
@@ -96,7 +96,7 @@ Equipment needed across all four phases. Each phase's section below states which
 
 ### Manual Test Cases
 
-Run on EQ-D1 with Hooper unreachable (per Setup, above) unless stated otherwise.
+Run on EQ-D1 with NutCache unreachable (per Setup, above) unless stated otherwise.
 
 | ID | Steps | Expected Result |
 |---|---|---|
@@ -122,7 +122,7 @@ Run on EQ-D1 with Hooper unreachable (per Setup, above) unless stated otherwise.
 ### Setup
 
 - Equipment: EQ-D1, EQ-D2, EQ-N1, EQ-N2, EQ-N3, EQ-A1, EQ-A2, EQ-S3.
-- Hooper up and running, both test devices on the same LAN and able to reach it.
+- NutCache dev up and running (EQ-N2), both test devices connected to the tailnet (EQ-N1) and able to reach it.
 - Two household accounts created in the emulator's Auth (EQ-A1): the "test household" both devices belong to, and a second, unrelated household for the isolation check (MT2.3).
 - Seed catalog (EQ-A2) extended with: at least one barcode in a globally-assigned range, at least one in an RCN range associated with two *different* fake stores in the fixture data, and at least one variable-weight-style code with two different embedded-weight values for the same underlying product.
 
@@ -155,7 +155,7 @@ Run on EQ-D1 with Hooper unreachable (per Setup, above) unless stated otherwise.
 
 | ID | Description | Type |
 |---|---|---|
-| AT2.1 | Against the Hooper emulator: list CRUD (CLOUD-1), a member reading/writing the household's own data succeeds (CLOUD-2 positive case), the offline outbox drains correctly once connectivity returns (SYNC-2), and the barcode DB subset (BC-4) is present in local cache after a sync. | Integration (on-device + emulator) |
+| AT2.1 | Against NutCache dev: list CRUD (CLOUD-1), a member reading/writing the household's own data succeeds (CLOUD-2 positive case), the offline outbox drains correctly once connectivity returns (SYNC-2), and the barcode DB subset (BC-4) is present in local cache after a sync. | Integration (on-device + emulator) |
 | AT2.2 | Two simulated clients edit the same list item while both offline, then both reconnect; assert the last-write-wins outcome is deterministic and no data is silently dropped or duplicated. | Integration (emulator) |
 | AT2.3 | Barcode classifier unit tests: known global-range codes, known RCN-range codes (BC-1/BC-2/SCAN-5), and variable-weight code parsing extracting the correct stable item reference regardless of embedded weight/price (SCAN-6). | Unit |
 | AT2.4 | OCR fallback (SCAN-2) and image-classification fallback (SCAN-3) resolve a fixture image with no barcode to the correct product/category respectively; both reuse Phase 1's "low confidence → confirm" UI path. | Integration (on-device) |
@@ -166,7 +166,7 @@ Run on EQ-D1 with Hooper unreachable (per Setup, above) unless stated otherwise.
 | ID | Steps | Expected Result |
 |---|---|---|
 | MT2.1 | On EQ-D1 (household member A), add an item to the shared list. Check EQ-D2 (household member B, same household). | Item appears on EQ-D2 after sync (LIST-1, LIST-7). |
-| MT2.2 | Put EQ-D1 in airplane mode, mark three items found, then restore connectivity. | All three changes appear in the Hooper emulator UI (EQ-S3), not just in the app's own display. |
+| MT2.2 | Put EQ-D1 in airplane mode, mark three items found, then restore connectivity. | All three changes appear in the NutCache dev emulator UI (EQ-S3), not just in the app's own display. |
 | MT2.3 | Attempt to open the test household's list while signed into the second, unrelated household account (EQ-A1). | Access is rejected. |
 | MT2.4 | Scan a product with no barcode, or a covered/damaged one. | OCR fallback resolves it. |
 | MT2.5 | Scan an item with no barcode and no legible text (e.g., a piece of produce). | Image-classification fallback proposes a category for confirmation. |
@@ -175,7 +175,7 @@ Run on EQ-D1 with Hooper unreachable (per Setup, above) unless stated otherwise.
 
 ### Exit Criteria
 
-- AT2.1–AT2.5 and MT2.1–MT2.7 all passing against Hooper.
+- AT2.1–AT2.5 and MT2.1–MT2.7 all passing against NutCache dev.
 - The Firestore security rules suite (part of AT2.5) passes independently — CLOUD-2 is not considered met on the strength of client-side behavior alone.
 - BC-3/SCAN-9 logged as carried forward per the note above; any other incomplete Should Have item logged the same way.
 
@@ -228,7 +228,7 @@ Run on EQ-D1 with Hooper unreachable (per Setup, above) unless stated otherwise.
 | AT3.2 | Coupon restriction logic (COUP-3): separate passing/failing cases for expiration, quantity threshold, and variant exclusion. | Unit |
 | AT3.3 | Same-category near-miss warning (COUP-5): coupon on file for product A in category C; scanning product B in category C fires the warning and does not auto-apply anything. | Unit |
 | AT3.4 | Goal-matching evaluator (NUTL-1): given a nutrient target (PLAN-1) and a product's nutrition data, verify pass/fail/boundary cases for min-only, max-only, and range target types. | Unit |
-| AT3.5 | Against Hooper: a price observation submitted with opt-out enabled (PRICE-8) never carries identifying contributor info in the shared collection (PRICE-7); one submitted without opt-out carries only the opaque contributor token, never personal identity. | Integration (emulator) |
+| AT3.5 | Against NutCache dev: a price observation submitted with opt-out enabled (PRICE-8) never carries identifying contributor info in the shared collection (PRICE-7); one submitted without opt-out carries only the opaque contributor token, never personal identity. | Integration (emulator) |
 | AT3.6 | NPROC-2's local goal snapshot updates correctly after an online goal edit, and remains correct/usable after connectivity is subsequently disabled. | Integration (on-device) |
 
 ### Manual Test Cases
@@ -240,7 +240,7 @@ Run on EQ-D1 with Hooper unreachable (per Setup, above) unless stated otherwise.
 | MT3.3 | With a coupon (EQ-P4) on file for a specific product, scan that exact product. | Coupon surfaced for confirmation, not auto-applied (COUP-4). |
 | MT3.4 | With the same coupon on file, scan a *different* product in the same category. | Near-miss warning appears, clearly naming the coupon and the original product. |
 | MT3.5 | With a nutrient target configured (e.g., "sodium ≤ 500 mg per serving"), scan a product exceeding it, in airplane mode. | Clear per-member warning shown, fully offline. |
-| MT3.6 | Scan a product with no nutrition data cached locally or on Hooper (use EQ-P5's "absent from database" sample). | App prompts to scan the Nutrition Facts panel (NUTL-2); a low-quality/illegible panel scan does not silently produce a wrong pass/fail result. |
+| MT3.6 | Scan a product with no nutrition data cached locally or in NutCache (use EQ-P5's "absent from database" sample). | App prompts to scan the Nutrition Facts panel (NUTL-2); a low-quality/illegible panel scan does not silently produce a wrong pass/fail result. |
 | MT3.7 | With connectivity off throughout, re-check the goal-fit indicator from MT3.5 without having made any new edits. | Indicator still reflects the previously-set goal correctly (NPROC-2). |
 | MT3.8 | (Requires at least two distinct "store" entries in test price data.) Open the price comparison view for a product with observations at both stores. | Both stores' prices shown; adjusting the configurable radius/store set (PRICE-5) changes what's included. |
 | MT3.9 | Disable connectivity, then open the price comparison view again. | Last-synced data shown with a visible timestamp, not a blank/broken state. |
@@ -261,7 +261,7 @@ Run on EQ-D1 with Hooper unreachable (per Setup, above) unless stated otherwise.
 
 - Equipment: EQ-D1, EQ-D2, EQ-D3, EQ-N2, EQ-A1.
 - Two household test accounts (EQ-A1) each with at least one recipe created, for the sharing test cases.
-- A real, publicly-reachable recipe URL with structured (schema.org) markup identified ahead of time for RECIPE-5's import test — this is the one test case in the whole plan that depends on the public internet rather than just the LAN/Hooper, since it's fetching a real third-party page.
+- A real, publicly-reachable recipe URL with structured (schema.org) markup identified ahead of time for RECIPE-5's import test — this is the one test case in the whole plan that depends on the public internet rather than just NutCache dev, since it's fetching a real third-party page.
 - iOS build produced via EQ-D3 before starting the PLAT-2 regression pass.
 
 ### Requirements Tested

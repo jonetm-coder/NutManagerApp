@@ -1,8 +1,34 @@
 # NutManagerApp
 
-A mobile app, part of a larger ecosystem with cloud storage/processing, that lets a user scan a product label, classify the product, and match it to a shopping list — while offline, in-store. The broader ecosystem also covers pricing/coupon capture, cross-user data sharing, and a full nutrition planning & health-tracking system.
+A mobile app, part of a larger ecosystem with cloud storage/processing (the server side, **NutCache**), that lets a user scan a product label, classify the product, and match it to a shopping list — while offline, in-store. The broader ecosystem also covers pricing/coupon capture, cross-user data sharing, and a full nutrition planning & health-tracking system.
 
 See [CLAUDE.md](CLAUDE.md) for the full project summary, and [docs/adrs/](docs/adrs/) for the architectural decisions driving the design (still being worked through — see Project Status below).
+
+## Naming Conventions
+
+**NutManager** is short for *Nutrition Manager*. "Nut" works twice over: it's nutrition, and it's what squirrels (and chipmunks) carefully gather, store, and guard. Major pieces of the system follow that theme:
+
+| Name | What it is | Why the name |
+|---|---|---|
+| **NutManager** | The project as a whole, and the mobile app. The repository is `NutManagerApp`. | Nutrition Manager. |
+| **NutCache** | The server side: the cloud services that store shopping lists, recipes, nutrition and pricing data, per [ADR 0006](docs/adrs/Accepted/0006-cloud-backend-platform.md). Its current development instance runs on Hooper; see [docs/design/nutcache-dev-instance.md](docs/design/nutcache-dev-instance.md). | A squirrel's cache is where the nuts are stored. |
+| **Securing NUTS** | Security across the whole infrastructure, tracked in [docs/securing_nuts.md](docs/securing_nuts.md): every development-time security shortcut and what must happen before go-live. | Making sure no other squirrels steal our nuts. |
+
+**Hooper** is the name of the Raspberry Pi that hosts the NutCache dev instance. It's an existing machine with its own name and other jobs, not part of the theme.
+
+When a new major component needs a name, keep it in the theme where it fits naturally, and add it to this table.
+
+### Identifiers
+
+Where a name appears in code, infrastructure, or configuration, it's lower-case with no spaces:
+
+| Context | Form | Example |
+|---|---|---|
+| Hostnames, VM names, tailnet devices | lower-case | `nutcache`, `nutcache.tail37f114.ts.net` |
+| Firebase project IDs | lower-case, hyphenated; `demo-` prefix for emulator-only | `demo-nutcache`; later e.g. `nutcache-dev`, `nutcache-prod` |
+| Tailscale tags | `tag:` + lower-case name | `tag:nutcache` |
+| Filesystem paths on hosts | lower-case name as the directory | `/mnt/netstorage/nutcache/`, `/mnt/backup/nutcache/` |
+| Prose and document titles | CamelCase product names | NutManager, NutCache |
 
 ## Project Status
 
@@ -19,6 +45,8 @@ The mobile client direction (see [ADR 0001](docs/adrs/Proposed/0001-mobile-app-f
 - [CLAUDE.md](CLAUDE.md) — project overview and workflow, written for AI-assisted development with Claude Code.
 - [docs/requirements.md](docs/requirements.md) — requirements.
 - [docs/adrs/](docs/adrs/) — architectural decision records.
+- [docs/design/nutcache-dev-instance.md](docs/design/nutcache-dev-instance.md) — the NutCache development instance on Hooper.
+- [docs/securing_nuts.md](docs/securing_nuts.md) — Securing NUTS: the go-live security ledger.
 
 ## Development Environment Setup — Flutter on Kali Linux with VS Code
 

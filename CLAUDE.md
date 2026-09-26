@@ -1,12 +1,12 @@
 # NutManagerApp
 
-See [README.md](README.md) for the human-facing project overview and development environment setup instructions.
+See [README.md](README.md) for the human-facing project overview, naming conventions (NutManager, NutCache, Securing NUTS, and how names appear in identifiers), and development environment setup instructions.
 
 ## Project
 
 NutManagerApp is a mobile app, part of a larger ecosystem with cloud storage/processing, that lets a user scan a product label, classify the product, and match it to a shopping list.
 
-- **Cloud side:** stores nutritional information, recipes, and shopping lists for a user and their household/family; also maintains historical pricing data shared/crowdsourced across users.
+- **Cloud side (NutCache):** the server side of the application is called **NutCache**. It stores nutritional information, recipes, and shopping lists for a user and their household/family; also maintains historical pricing data shared/crowdsourced across users.
 - **Mobile side:** downloads the shopping list ahead of a shopping trip, then must scan/categorize items and match them to the shopping list **offline**, since in-store connectivity is expected to be spotty. Also captures item pricing and coupons while shopping.
 - **Platforms:** Android prototype first, iOS planned to follow; leaning toward Flutter for cross-platform client code (see ADR 0001).
 - **On-device AI:** product classification/matching must run on the phone itself, not the cloud, to satisfy the offline requirement (see ADRs 0002-0004).
@@ -20,7 +20,8 @@ All architectural decisions below have been accepted — see [docs/adrs/Accepted
 
 - [docs/adrs/](docs/adrs/) — Architectural Decision Records (ADRs). See [docs/adrs/README.md](docs/adrs/README.md) for the process.
 - [docs/requirements.md](docs/requirements.md) — Functional requirements derived from the ADRs, each with a priority (Must/Should/Nice to Have) and acceptance criteria (filled in where known). Update this alongside the ADRs as decisions evolve.
-- [docs/design/](docs/design/) — Design notes that don't rise to the level of an ADR (interim/temporary setups, implementation notes tied to an accepted ADR, etc.). Currently: [Hooper local dev backend](docs/design/hooper-local-dev-backend.md), describing the temporary Raspberry Pi + VM + Firebase Local Emulator Suite setup standing in for the real cloud backend (ADR 0006) during early development.
+- [docs/design/](docs/design/) — Design notes that don't rise to the level of an ADR (interim/temporary setups, implementation notes tied to an accepted ADR, etc.). Currently: [NutCache dev instance](docs/design/nutcache-dev-instance.md), describing the temporary setup standing in for the real cloud backend (ADR 0006) during early development: the Firebase Local Emulator Suite in a VM on Hooper (a Raspberry Pi), reachable only over the owner's Tailscale tailnet.
+- [docs/securing_nuts.md](docs/securing_nuts.md) — Go-live security ledger: every development-time security shortcut (e.g., relying on the Tailscale VPN for access control) and what must be done to secure it before the system goes live. See the Workflow rule below.
 - [docs/development-plan.md](docs/development-plan.md) — The four-phase development roadmap: every requirement in docs/requirements.md assigned to a phase (scope/sequencing only). Update the Traceability Summary whenever a requirement is added.
 - [docs/test-plan.md](docs/test-plan.md) — The test plan: equipment/environment needed, per-phase setup, test cases (automated `AT#.#` / manual `MT#.#`), requirement-to-test-case traceability, and exit criteria. Keep this and development-plan.md's phase scope in sync when either changes.
 
@@ -52,6 +53,7 @@ All architectural decisions below have been accepted — see [docs/adrs/Accepted
 - Use `docs/adrs/template.md` as the starting point for any new ADR.
 - Requirements belong to accepted decisions, not proposed ones: derive/update [docs/requirements.md](docs/requirements.md) as part of accepting an ADR (moving it into `docs/adrs/Accepted/`), not while it's still in `Proposed/`.
   - Note: the initial batch of requirements (ADRs 0001-0012) was derived while those ADRs were still Proposed, ahead of this rule being adopted. No issues have surfaced from that, so it's being left as-is rather than reworked — but this is the exception, not the pattern to repeat.
+- **Security debt goes in [docs/securing_nuts.md](docs/securing_nuts.md) when the decision is made.** Whenever a development decision relies on a protection that won't exist, or won't be enough, in production, add a `SEC-#` entry in the same change. Examples: VPN-only access, emulator auth bypasses, cleartext exceptions, test credentials, broad permissions, disabled checks. The entry says what we're doing now, why it's acceptable for development, and the concrete steps required to secure it before go-live. Don't defer this to later, and don't resolve an entry without recording how it was verified.
 - Keep `docs/requirements.md` up to date as the project progresses — when an ADR is added, superseded, or its scope changes, revisit the requirements it produced.
 
 ## Reference Documents
@@ -61,7 +63,8 @@ All architectural decisions below have been accepted — see [docs/adrs/Accepted
 - Test plan (equipment, setup, test cases, exit criteria): [docs/test-plan.md](docs/test-plan.md)
 - ADR index/process: [docs/adrs/README.md](docs/adrs/README.md)
 - ADR template: [docs/adrs/template.md](docs/adrs/template.md)
-- Design notes: [docs/design/](docs/design/) (see [Hooper local dev backend](docs/design/hooper-local-dev-backend.md))
+- Go-live security ledger: [docs/securing_nuts.md](docs/securing_nuts.md)
+- Design notes: [docs/design/](docs/design/) (see [NutCache dev instance](docs/design/nutcache-dev-instance.md))
 - Accepted ADRs:
   - [0001: Mobile App Framework](docs/adrs/Accepted/0001-mobile-app-framework.md)
   - [0002: Product Label Capture & Recognition Method](docs/adrs/Accepted/0002-product-label-capture-method.md)

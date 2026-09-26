@@ -1,0 +1,202 @@
+# NutCache Dev Instance on Hooper (Temporary Local Development Backend)
+
+**Status:** Interim/temporary setup, not an architectural decision. This document describes the current dev/test environment and how it's expected to be retired once the real cloud backend is stood up. It doesn't change or supersede [ADR 0006 (Cloud Backend Platform)](../adrs/Accepted/0006-cloud-backend-platform.md) — Firebase remains the target production backend; this is just where and how it's being stood in for during early development.
+
+## Naming
+
+**NutCache** is the name of the server side of the application — the cloud services the mobile app talks to, per ADR 0006/0007. It names the service regardless of where it runs: this document describes the *NutCache dev instance*, a local stand-in hosted on Hooper; the real Firebase-hosted backend will also be NutCache.
+
+| Thing | Name |
+|---|---|
+| Physical host | `hooper` (Raspberry Pi; keeps its own name and its other roles) |
+| libvirt VM running NutCache dev | `nutcache` |
+| Tailnet device / hostname | `nutcache` → `nutcache.tail37f114.ts.net` |
+| Firebase project ID used by the emulators | `demo-nutcache` |
+| VM disk image and host-side files | `/mnt/netstorage/nutcache/` |
+| Backups of emulator data | `/mnt/backup/nutcache/` |
+| Future real Firebase projects | e.g. `nutcache-dev`, `nutcache-prod` (see Open Questions) |
+
+The `demo-` prefix on the project ID is deliberate: Firebase treats any project ID starting with `demo-` as emulator-only, so the SDKs and emulators refuse to reach real Google services with it. A misconfigured dev build can't accidentally talk to (or bill) a real project.
+
+## Purpose
+
+Standing up a real Firebase project this early isn't necessary — most early development and functional testing doesn't need production infrastructure, billing exposure, or public reachability. Instead, the NutCache dev instance is stood up on **Hooper**, a Raspberry Pi already on the home network, for the current development phase.
+
+## Hardware & Host
+
+- **Hooper** is a Raspberry Pi 4 Model B with 8 GB RAM, 4 cores, running 64-bit Debian 12 (bookworm).
+- Hooper already runs other services (Docker containers including Vaultwarden/Caddy, Samba, and others). NutCache must not starve them — hence the VM's hard resource caps below.
+- This is genuinely modest hardware compared to any real cloud infrastructure. It's expected to be *sufficient for single-developer functional testing* — it is explicitly **not** representative of production performance, and shouldn't be used to draw any conclusions about how the real backend will perform once it's on actual cloud infrastructure.
+
+## Why Run This in a VM
+
+Rather than installing the backend stand-in directly on Hooper's host OS:
+
+- **Isolation** from anything else Hooper is used for.
+- **Snapshot/rollback** while the emulator setup is still being figured out — cheap to reset to a known-good state instead of debugging host-level drift.
+- **Resource capping** — the VM is given a fixed CPU/RAM allocation so it can't starve whatever else Hooper is doing.
+- **Own network identity** — the VM joins the tailnet as its own device, so its ports never collide with Hooper's (Hooper already uses 5000 and 5001, the latter being the Functions emulator's default port).
+- **Hardware-assisted virtualization (KVM) is viable** on a Pi 4/5 with a 64-bit kernel (confirmed working on Hooper), which keeps virtualization overhead reasonable on hardware this modest. (This would not be a reasonable plan on a Pi 3 or a 32-bit OS, where KVM support is poor to nonexistent — noting this in case Hooper is ever swapped for older hardware.)
+
+### VM Specification
+
+| Item | Value |
+|---|---|
+| Hypervisor/tooling | libvirt + QEMU/KVM |
+| Guest OS | Debian 12 (arm64) |
+| vCPUs | 2 (of Hooper's 4) |
+| RAM | 3 GB, hard cap. Hooper has only ~100 MB of swap, so the cap is what protects Hooper's other services from the OOM killer. The Firestore emulator's JVM heap is also capped inside the VM so it can't balloon to the VM's limit. |
+| Disk | `qcow2` image (keeps snapshots available) in `/mnt/netstorage/nutcache/` |
+| Guest software | Java 21 (required by the Firestore emulator), Node.js LTS, `firebase-tools`, Tailscale |
+| Emulators run as | A systemd service inside the VM, started at boot |
+
+## Storage
+
+Hooper boots from a 58 GB SD card. Everything write-heavy for NutCache lives on the attached external drive instead, both to save SD card wear and because that's where the space is.
+
+- **External drive layout:** a 4.5 TB USB drive, LUKS-encrypted, holding an LVM volume group with two volumes: `/mnt/netstorage` (3.5 TB, general data) and `/mnt/backup` (1 TB, backups). There's no unallocated space in the volume group, and none is needed — NutCache uses directories on the existing volumes rather than its own logical volume.
+- **VM disk image:** `/mnt/netstorage/nutcache/`.
+- **Emulator data:** the emulators hold state in memory and start empty unless told otherwise. They're run with `--import` from, and `--export-on-exit` to, a data directory on the VM's disk, so state survives a clean restart.
+- **Backups:** a scheduled job on Hooper triggers an export inside the VM and copies it to `/mnt/backup/nutcache/`, keeping a rolling set of recent snapshots. This also bounds data loss after an unclean shutdown (power loss skips `--export-on-exit`) to the time since the last scheduled export.
+- **Boot-order safeguard:** the external drive is unlocked at boot from a key file and mounted with `nofail`, so Hooper still boots if the drive is missing or fails to unlock — in which case `/mnt/netstorage` is just an empty directory on the SD card. The VM is therefore **not** started with libvirt's plain autostart; it's started by a systemd unit with `RequiresMountsFor=/mnt/netstorage`, so it only starts when the real drive is mounted and never silently writes a fresh VM onto the SD card.
+
+## What Runs Inside the VM: Firebase Local Emulator Suite
+
+The VM runs Google's official [Firebase Local Emulator Suite](https://firebase.google.com/docs/emulator-suite), emulating Firestore, Auth, Cloud Functions, and Cloud Storage locally — the same four Firebase products ADR 0006 chose for the real backend.
+
+This matters for how clean the eventual transition is: the mobile app talks to the **same Firebase client SDK APIs** whether it's pointed at the NutCache dev instance or the real cloud project. There's no separate "local backend API" to build or throw away — dev builds just configure the Firebase SDK to connect to the emulator endpoints on `nutcache` instead of a live project.
+
+The NutCache configuration the emulators run from — `firebase.json`, Firestore security rules and indexes, Storage rules, and Cloud Functions source — is version-controlled in this repository, not clicked together in the emulator UI. That's what makes the transition to a real project a deploy rather than a rebuild (see Transition Plan, step 2).
+
+## Network: Tailnet-Only Access
+
+NutCache dev is reachable **only over the owner's Tailscale tailnet** — not on the home LAN, not via port forwarding through Hooper, and never on the public internet. Tailscale's WireGuard tunnel supplies both encryption and peer authentication, and it works the same at home and away from it (including over cellular), so one hostname — `nutcache.tail37f114.ts.net` — is used everywhere.
+
+### Devices on the Tailnet
+
+| Device | Role for NutManager |
+|---|---|
+| `hooper` | Hosts the VM. Exposes **no** NutCache ports itself; its existing tailnet-reachable services are unaffected. |
+| `quint` (Linux laptop) | Developer workstation: Emulator UI in a browser, and scripts/tests run against NutCache. |
+| `teds-xcover7-pro` | Test phone EQ-D1. Tailscale must be connected for Phase 2+ tests. |
+| Second test device (EQ-D2) | Needed from Phase 2 for the two-device household tests. Joins under the owner's account. |
+| `nutcache` | The VM. Joins as a **tagged** device (`tag:nutcache`) rather than as the owner's user, so tailnet policy can restrict it independently; tagged devices also don't have node key expiry, which suits a server. |
+
+A tailnet device is connected to all other permitted devices at once — there's no switching between `hooper` and `nutcache`.
+
+### Ports Served on `nutcache`
+
+All are plain HTTP or WebSocket, carried inside the WireGuard tunnel. None has any access control of its own beyond tailnet membership (see "What tailnet access implies" below).
+
+| Port | Service | What it serves | Used by |
+|---|---|---|---|
+| 4000 | Emulator Suite UI | Web admin console: browse/edit Firestore documents, Auth users, Storage files; view function logs; Firestore request monitor showing which security rule allowed/denied each request. | Developer's browser (EQ-S3) |
+| 4400 | Emulator Hub | Small REST API for discovering which emulators are running on which ports; also exposes data-export endpoints. | UI, CLI, test tooling, backup job |
+| 4500 | Logging | WebSocket stream of emulator logs. | UI's Logs tab |
+| 9150 | Firestore WebSocket | Live Firestore request monitoring. | UI's Firestore Requests tab |
+| 9099 | Auth emulator | Firebase Auth REST APIs (sign-up/sign-in/token refresh), plus emulator-only endpoints to list/delete all users and read verification/reset codes. | App sign-in; tests creating EQ-A1 accounts |
+| 8080 | Firestore emulator | The database, over gRPC and REST on one port. Phase 2 contents: households/membership, shopping lists and items (LIST-1, LIST-7), the barcode database (BC-1, BC-2, BC-4), synced offline changes (SYNC-2). **Security rules are enforced here** (CLOUD-2). | App; rules tests (AT2.5); sync tests (AT2.1, AT2.2) |
+| 5001 | Functions emulator | Cloud Functions from the repo: HTTP/callable endpoints at `/demo-nutcache/<region>/<function>`, plus Firestore-triggered functions running internally. Server-computed fields (CLOUD-3) are produced here. Functions run with admin privileges, bypassing security rules. | App callable functions; tests |
+| 9199 | Storage emulator | Cloud Storage for uploaded files (e.g. label/price-tag/coupon images in later phases). Storage security rules enforced. | App (later phases) |
+
+**Deliberately not running:** Hosting (5000), Realtime Database (9000), Pub/Sub (8085), Eventarc (9299), Data Connect (9399) — none is used per ADR 0006. The Functions debugger/inspector port (9229) stays off unless enabled for a specific debugging session.
+
+### What Tailnet Access Implies
+
+Any device that can reach these ports can do anything to NutCache dev's data:
+
+- Firestore and Storage emulators bypass security rules entirely for requests carrying `Authorization: Bearer owner`. Rules only constrain well-behaved clients like the app — they are tested here, not relied on for protection.
+- The Auth emulator issues unsigned tokens and will sign in as any user.
+- The Hub and Auth emulator expose unauthenticated export and delete-all endpoints.
+
+Therefore:
+
+- **Tailnet membership is the entire access control.** Never enable Tailscale Funnel for `nutcache`, and never share the device outside the tailnet.
+- **Test data only.** No real personal or health data goes into NutCache dev, consistent with [ADR 0020](../adrs/Accepted/0020-health-data-privacy-and-hipaa.md).
+- The go-live consequences of relying on the tailnet are tracked in [securing_nuts.md](../securing_nuts.md) (SEC-1 to SEC-7).
+
+### Non-Tailnet Interfaces on the VM
+
+| Interface / direction | What's there |
+|---|---|
+| libvirt NAT network (`192.168.122.0/24`, reachable only from Hooper itself) | SSH, for administration from Hooper and for the backup job. Emulator ports are firewalled off on this interface. |
+| Home LAN | Nothing. The VM isn't bridged onto the LAN, and Hooper forwards nothing to it. |
+| Tailscale SSH | Off. Administration goes through Hooper. Can be enabled later if direct SSH from the laptop is wanted. |
+| Outbound | Package installs, the one-time emulator binary download, Tailscale's own control/relay traffic. The `demo-` project ID prevents Functions code from reaching real Google services. |
+
+### Defense Layers
+
+1. **Tailnet policy** (outermost): owner's devices may reach `tag:nutcache` only on the eight ports above; `tag:nutcache` may initiate **no** connections to other tailnet devices, so a compromised VM can't reach Hooper's services. Tailscale's default policy (`"src": ["*"]`) would include tagged devices as sources, so it's narrowed. Policy (set in the Tailscale admin console):
+
+   ```jsonc
+   {
+     "tagOwners": {
+       "tag:nutcache": ["autogroup:admin"],
+     },
+     "acls": [
+       // The owner's own devices can reach each other on all ports (replaces the default allow-all).
+       {"action": "accept", "src": ["autogroup:member"], "dst": ["autogroup:self:*"]},
+       // The owner's devices can reach the NutCache dev emulator ports, and nothing else on nutcache.
+       {"action": "accept", "src": ["autogroup:member"],
+        "dst": ["tag:nutcache:4000,4400,4500,9150,9099,8080,5001,9199"]},
+       // No rule has tag:nutcache as a source, so nutcache cannot initiate connections to anything.
+     ],
+   }
+   ```
+
+   Any existing `ssh` or other sections of the policy are kept as they are.
+
+2. **VM firewall (nftables):** emulator ports accepted on `tailscale0` only; SSH accepted on the libvirt interface only; everything else inbound dropped.
+3. **Emulator binding:** the emulators listen only on the VM's own interfaces; nothing is reachable via any Hooper address.
+
+### Why Plain HTTP Rather Than HTTPS
+
+Using HTTPS end to end was considered and rejected, because the Firebase SDKs don't support it for most emulators:
+
+- The Android Auth, Functions, and Storage SDKs' emulator modes hard-code `http://` connections, with no TLS option.
+- Firestore alone could be pointed at an HTTPS host (e.g. via `tailscale serve` TLS termination), but that would add configuration without removing the need for a cleartext exception for the other three.
+- The Emulator UI's page connects directly to ports 4400/4500/9150 over plain HTTP/WS, which browsers block as mixed content if the UI itself is served over HTTPS.
+- Tailscale HTTPS certificates are logged in public Certificate Transparency logs, publishing the tailnet and device names.
+
+What mitigates it:
+
+- On the wire, traffic is inside WireGuard: encrypted, and authenticated to the `nutcache` device's key.
+- The app's Android cleartext exception (a network security config `domain-config`) is scoped to `nutcache.tail37f114.ts.net` in **debug builds only**. Release builds keep Android's default cleartext block, and production NutCache (real Firebase) is HTTPS.
+- The app addresses NutCache by its MagicDNS name, never the raw `100.x` IP. If Tailscale is off on the device the name simply fails to resolve, whereas a hard-coded `100.x` address could be routed over a mobile carrier's network (carriers use the same CGNAT range).
+
+## Testing Implications
+
+- "Online" for NutCache dev means "Tailscale connected," from anywhere — the home LAN is irrelevant. That makes functional testing away from home (including an actual in-store trip over cellular) possible before the real cloud backend exists.
+- It is still **not representative of real-world backend connectivity**: latency to a Pi through Tailscale (possibly via a relay) and a single-host availability profile say nothing about a real cloud endpoint. This matters for testing the assumptions in [ADR 0005](../adrs/Accepted/0005-offline-local-storage-and-sync.md) (offline-first in-store shopping) and [ADR 0015](../adrs/Accepted/0015-cloud-local-split-nutrition-planning.md) (cloud-first nutrition planning, which assumes general connectivity): both can be functionally tested against NutCache dev, but performance/latency conclusions need the real backend.
+- **Phase 1 isolation:** Phase 1 tests must run with NutCache unreachable. Either disconnect Tailscale on the test device or shut the VM down — airplane mode alone isn't enough, and neither is being off the home Wi-Fi, since Tailscale works over any network.
+
+## Known Limitations
+
+Being upfront about what this setup is *not*:
+
+- **Single point of failure**, no uptime guarantees. Backups are the scheduled exports described under Storage — no replication or offsite copy beyond that.
+- **Limited concurrency/performance headroom** — a Pi running a VM running the emulator suite (the Firestore emulator alone runs on a JVM) has a low ceiling. Fine for one developer clicking through the app; not a substitute for any real load or performance testing.
+- **No access control beyond the tailnet.** See "What Tailnet Access Implies." Never exposed via Funnel, port forwarding, or the public internet.
+- **Emulator behavior can subtly diverge from production** — quota/rate-limit behavior, and occasionally newer API surface, may not be perfectly emulated. Don't treat "works against the emulator" as a guarantee it'll behave identically against the real service.
+
+## Transition Plan to Real Cloud Infrastructure
+
+**Trigger conditions** (any of these means it's time to move NutCache off Hooper):
+
+- Field testing needs realistic backend latency/availability, not just functional connectivity (which the tailnet already provides).
+- A developer or tester outside the owner's tailnet needs access to a shared backend.
+- Need to validate behavior against real Firebase quotas, billing, or performance characteristics.
+- Approaching a releasable prototype milestone.
+
+**Steps:**
+
+1. Create a real Firebase project (consider whether separate dev/staging vs. production Firebase projects are wanted — that's a decision for its own discussion when this becomes relevant, not decided here).
+2. Deploy the existing Firestore security rules, indexes, Storage rules, and Cloud Functions from version-controlled source to the real project. These are already tracked as source alongside the app, so this step is a deploy, not a rebuild.
+3. Repoint the mobile app's build configuration (e.g., Flutter build flavors / environment-specific Firebase config files) from the NutCache dev emulator endpoints to the live Firebase project, and drop the debug-only cleartext exception if no build flavor still needs it.
+4. Re-run the functional test suite against the live project before relying on it for anything real.
+5. Before any real users or real data: every entry in [securing_nuts.md](../securing_nuts.md) is Done or recorded as not applicable. Several entries (SEC-1 to SEC-7) come from this setup.
+6. Decommission the `nutcache` VM (remove it from the tailnet and the tailnet policy) once it's no longer needed. Hooper itself continues in its other roles.
+
+## Open Questions
+
+- Whether dev/staging/production Firebase project separation eventually warrants its own ADR — not decided here; this document only describes the current interim local setup.

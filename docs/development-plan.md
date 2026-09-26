@@ -13,7 +13,7 @@ Every requirement ID referenced here is the source of truth in [docs/requirement
 
 ## Phase 0 — Foundation (Already Complete)
 
-Not one of the four requested phases, but worth noting as the base everything below builds on: the Flutter app scaffold (`app/`), the dartdoc/`public_member_api_docs`/UREQS documentation convention, and the temporary Hooper (Firebase Local Emulator Suite) backend from [docs/design/hooper-local-dev-backend.md](design/hooper-local-dev-backend.md) are already in place. Phase 2 is where the app first actually talks to Hooper.
+Not one of the four requested phases, but worth noting as the base everything below builds on: the Flutter app scaffold (`app/`) and the dartdoc/`public_member_api_docs`/UREQS documentation convention are already in place. The NutCache dev instance (the Firebase Local Emulator Suite in a VM on Hooper, reachable over Tailscale) is designed in [docs/design/nutcache-dev-instance.md](design/nutcache-dev-instance.md) but not yet stood up; it must be running before Phase 2, which is where the app first actually talks to NutCache.
 
 ---
 
@@ -45,7 +45,7 @@ Not one of the four requested phases, but worth noting as the base everything be
 
 ## Phase 2 — Cloud Backend, Multi-Device Household Sync, Barcode DB, Full Capture
 
-**Goal:** Replace Phase 1's local-only list/catalog with the real cloud-backed model: Firebase (via Hooper, per [docs/design/hooper-local-dev-backend.md](design/hooper-local-dev-backend.md)) as the source of truth for shopping lists, household multi-user access, the offline outbox/sync pattern, and the shared barcode database. Also fill in the capture-method richness deferred from Phase 1 (OCR and image-classification fallbacks, variable-weight barcode parsing, RCN store-scoping).
+**Goal:** Replace Phase 1's local-only list/catalog with the real cloud-backed model: NutCache on Firebase (via the NutCache dev instance on Hooper, per [docs/design/nutcache-dev-instance.md](design/nutcache-dev-instance.md)) as the source of truth for shopping lists, household multi-user access, the offline outbox/sync pattern, and the shared barcode database. Also fill in the capture-method richness deferred from Phase 1 (OCR and image-classification fallbacks, variable-weight barcode parsing, RCN store-scoping).
 
 ### Requirements in Scope
 

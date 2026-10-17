@@ -1,6 +1,6 @@
 # Phased Development Plan
 
-This plan sequences the requirements in [docs/requirements.md](requirements.md) into four development phases, each ending in a working, testable increment. Phasing follows dependency order and value delivery: prove the core on-device loop first, then wire up the cloud/multi-device backend, then layer on economic features (pricing/coupons) and the first slice of nutrition matching, then build out the full nutrition/health/sharing system. All 92 requirements currently in `docs/requirements.md` are assigned to exactly one phase below (see the Traceability Summary at the end).
+This plan sequences the requirements in [docs/requirements.md](requirements.md) into four development phases, each ending in a working, testable increment. Phasing follows dependency order and value delivery: prove the core on-device loop first, then wire up the cloud/multi-device backend, then layer on economic features (pricing/coupons) and the first slice of nutrition matching, then build out the full nutrition/health/sharing system. All 100 requirements currently in `docs/requirements.md` are assigned to exactly one phase below (see the Traceability Summary at the end).
 
 Every requirement ID referenced here is the source of truth in [docs/requirements.md](requirements.md) — this document doesn't restate acceptance criteria in full, only enough to make each phase self-contained to read. **Test plans, test equipment, setup, and exit criteria live in [docs/test-plan.md](test-plan.md)**, not here — this document is scope and sequencing only.
 
@@ -38,6 +38,19 @@ Not one of the four requested phases, but worth noting as the base everything be
 | LIST-6 | Category/synonym mapping to support matching | Should Have |
 | SYNC-1 | Cache list + catalog subset locally (local-only in this phase — no cloud source yet) | Must Have |
 | SYNC-3 | No in-store action blocked by lack of connectivity | Must Have |
+| LSTORG-1 | Multiple named shopping lists | Must Have |
+| LSTORG-2 | Add a planned item directly to a list | Must Have |
+| LSTORG-3 | Quantity on list items/basket entries, defaulting to 1 | Must Have |
+| LSTORG-4 | Archive a list; browse archived lists read-only | Must Have |
+| LSTORG-5 | Top-level nav separates Shopping Lists from other sections | Must Have |
+| PRICE-1 | Capture price via shelf-tag scan | Must Have |
+| PRICE-2 | Manual price entry fallback | Must Have |
+| PRICE-3 | Record price with product/store/timestamp | Must Have |
+| PRICE-10 | Recognize per-unit vs. total price | Must Have |
+| PLOOKUP-1 | "Check Products": external lookup by name to pre-populate catalog | Should Have |
+| PLOOKUP-2 | Scan-to-add from home via local/history/external resolution waterfall | Should Have |
+
+**Pulled forward from later phases:** LSTORG-1..5, PRICE-1/2/3/10, and PLOOKUP-1/2 were not in the original four-phase scope above but were built directly into the Phase 1 app, ahead of schedule, in response to user feedback during Phase 1 development. PRICE-1/2/3/10 were originally scoped for Phase 3 (price capture only makes sense once there's a basket to attach prices to, which Phase 1 already has); PRICE-4..9 (comparison, sharing) remain in Phase 3 as originally planned, since those genuinely need the cloud-side shared pricing dataset. PLOOKUP-1/2 are an accelerated, phone-only interim version of what Phase 2's BC-1/SCAN-9/SCAN-10 (a centrally-built, crowdsourced shared barcode database via NutCache) formally calls for — implemented now by querying external open product databases directly from the phone instead, since NutCache doesn't exist yet. This is a deliberate, tracked architecture deviation, not an oversight: see [docs/nutcache_migration_debt.md](nutcache_migration_debt.md) (MIGRATE-1) for what moving it to NutCache will require. Per this plan's own guiding principle, Phase 2 should be able to replace the external-lookup implementation behind `ProductLookupService` without reworking `ProductResolutionService`'s waterfall or any screen that calls it.
 
 **Test plan, equipment, and exit criteria:** [docs/test-plan.md § Phase 1](test-plan.md#phase-1--core-scanning--local-shopping-list)
 
@@ -76,15 +89,12 @@ Not one of the four requested phases, but worth noting as the base everything be
 
 ## Phase 3 — Pricing, Coupons & In-Store Nutrition Goal Matching
 
-**Goal:** Add the economic in-store features (price capture/comparison, coupons) and the first slice of the nutrition domain — reading a product's Nutrition Facts panel and checking it against a household member's basic nutrient targets, in real time, offline. Full nutrition *planning* (editing a rich plan, biometric goals, recipes, tracking history) is still Phase 4; this phase only builds the minimum goal data needed for the in-store check to mean something (a flat set of nutrient targets per member).
+**Goal:** Add the economic in-store features (price comparison/sharing, coupons) and the first slice of the nutrition domain — reading a product's Nutrition Facts panel and checking it against a household member's basic nutrient targets, in real time, offline. Full nutrition *planning* (editing a rich plan, biometric goals, recipes, tracking history) is still Phase 4; this phase only builds the minimum goal data needed for the in-store check to mean something (a flat set of nutrient targets per member). Price *capture* itself (PRICE-1/2/3/10) was pulled forward into Phase 1 — see that phase's "Pulled forward" note; this phase adds cross-store comparison and the shared/cross-household pricing dataset on top of it.
 
 ### Requirements in Scope
 
 | ID | Gist | Priority |
 |---|---|---|
-| PRICE-1 | Capture price via shelf-tag scan | Must Have |
-| PRICE-2 | Manual price entry fallback | Must Have |
-| PRICE-3 | Record price with product/store/timestamp | Must Have |
 | PRICE-4 | Compare price across nearby stores | Should Have |
 | PRICE-5 | Configure comparison radius/stores | Nice to Have |
 | PRICE-6 | Offline: show last-synced price data with timestamp | Should Have |
@@ -165,10 +175,10 @@ Not one of the four requested phases, but worth noting as the base everything be
 
 | Phase | Requirement IDs | Count |
 |---|---|---|
-| 1 | PLAT-1, PLAT-3, SCAN-1, SCAN-4, SCAN-7, SCAN-8, LIST-2, LIST-3, LIST-4, LIST-5, LIST-6, SYNC-1, SYNC-3 | 13 |
+| 1 | PLAT-1, PLAT-3, SCAN-1, SCAN-4, SCAN-7, SCAN-8, LIST-2, LIST-3, LIST-4, LIST-5, LIST-6, SYNC-1, SYNC-3, LSTORG-1..5, PRICE-1, PRICE-2, PRICE-3, PRICE-10, PLOOKUP-1, PLOOKUP-2 | 24 |
 | 2 | LIST-1, LIST-7, SYNC-2, SYNC-4, CLOUD-1, CLOUD-2, CLOUD-3, CLOUD-4, BC-1, BC-2, BC-3, BC-4, SCAN-2, SCAN-3, SCAN-5, SCAN-6, SCAN-9, SCAN-10 | 18 |
-| 3 | PRICE-1..9, COUP-1..6, NUTL-1..4, PLAN-1, PLAN-4, NPROC-2 | 22 |
+| 3 | PRICE-4..9, COUP-1..6, NUTL-1..4, PLAN-1, PLAN-4, NPROC-2 | 19 |
 | 4 | PLAN-2, PLAN-3, NPROC-1, RECIPE-1..7, COOK-1..3, TRACK-1..6, PRIV-1..5, PROV-1..3, SHAREGOV-1, RSHARE-1..6, RCOPY-1..4, PLAT-2 | 39 |
-| **Total** | | **92** |
+| **Total** | | **100** |
 
 If a new requirement is added to `docs/requirements.md` later, assign it to a phase here in the same edit — this table should stay a complete accounting of every requirement, not just the ones convenient to phase.

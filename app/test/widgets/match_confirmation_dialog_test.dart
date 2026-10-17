@@ -7,8 +7,10 @@ import 'package:nut_manager_app/services/matching_service.dart';
 ShoppingListItem _item(int id, String name) {
   return ShoppingListItem(
     id: id,
+    listId: 1,
     name: name,
     category: 'dairy',
+    quantity: 1,
     status: ListItemStatus.pending,
   );
 }

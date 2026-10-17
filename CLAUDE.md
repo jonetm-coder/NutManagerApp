@@ -22,6 +22,7 @@ All architectural decisions below have been accepted — see [docs/adrs/Accepted
 - [docs/requirements.md](docs/requirements.md) — Functional requirements derived from the ADRs, each with a priority (Must/Should/Nice to Have) and acceptance criteria (filled in where known). Update this alongside the ADRs as decisions evolve.
 - [docs/design/](docs/design/) — Design notes that don't rise to the level of an ADR (interim/temporary setups, implementation notes tied to an accepted ADR, etc.). Currently: [NutCache dev instance](docs/design/nutcache-dev-instance.md), describing the temporary setup standing in for the real cloud backend (ADR 0006) during early development: the Firebase Local Emulator Suite in a VM on Hooper (a Raspberry Pi), reachable only over the owner's Tailscale tailnet.
 - [docs/securing_nuts.md](docs/securing_nuts.md) — Go-live security ledger: every development-time security shortcut (e.g., relying on the Tailscale VPN for access control) and what must be done to secure it before the system goes live. See the Workflow rule below.
+- [docs/nutcache_migration_debt.md](docs/nutcache_migration_debt.md) — NutCache migration ledger: every development-time decision to build something locally/client-side that an accepted ADR calls for NutCache to do centrally (e.g., querying external product databases directly from the phone instead of through NutCache), and what's required to migrate it once NutCache exists to host it. See the Workflow rule below.
 - [docs/development-plan.md](docs/development-plan.md) — The four-phase development roadmap: every requirement in docs/requirements.md assigned to a phase (scope/sequencing only). Update the Traceability Summary whenever a requirement is added.
 - [docs/test-plan.md](docs/test-plan.md) — The test plan: equipment/environment needed, per-phase setup, test cases (automated `AT#.#` / manual `MT#.#`), requirement-to-test-case traceability, and exit criteria. Keep this and development-plan.md's phase scope in sync when either changes.
 
@@ -54,6 +55,7 @@ All architectural decisions below have been accepted — see [docs/adrs/Accepted
 - Requirements belong to accepted decisions, not proposed ones: derive/update [docs/requirements.md](docs/requirements.md) as part of accepting an ADR (moving it into `docs/adrs/Accepted/`), not while it's still in `Proposed/`.
   - Note: the initial batch of requirements (ADRs 0001-0012) was derived while those ADRs were still Proposed, ahead of this rule being adopted. No issues have surfaced from that, so it's being left as-is rather than reworked — but this is the exception, not the pattern to repeat.
 - **Security debt goes in [docs/securing_nuts.md](docs/securing_nuts.md) when the decision is made.** Whenever a development decision relies on a protection that won't exist, or won't be enough, in production, add a `SEC-#` entry in the same change. Examples: VPN-only access, emulator auth bypasses, cleartext exceptions, test credentials, broad permissions, disabled checks. The entry says what we're doing now, why it's acceptable for development, and the concrete steps required to secure it before go-live. Don't defer this to later, and don't resolve an entry without recording how it was verified.
+- **NutCache migration debt goes in [docs/nutcache_migration_debt.md](docs/nutcache_migration_debt.md) when the decision is made.** Whenever a development decision builds something locally/client-side that an accepted ADR envisions NutCache doing centrally (e.g., a mobile-side feature calling an external API directly because NutCache doesn't exist yet to host that call), add a `MIGRATE-#` entry in the same change. The entry says what we're doing now, why it's acceptable for now, and the concrete steps required to migrate it to NutCache. Don't defer this to later, and don't resolve an entry without recording how it was verified.
 - Keep `docs/requirements.md` up to date as the project progresses — when an ADR is added, superseded, or its scope changes, revisit the requirements it produced.
 
 ## Reference Documents
@@ -64,6 +66,7 @@ All architectural decisions below have been accepted — see [docs/adrs/Accepted
 - ADR index/process: [docs/adrs/README.md](docs/adrs/README.md)
 - ADR template: [docs/adrs/template.md](docs/adrs/template.md)
 - Go-live security ledger: [docs/securing_nuts.md](docs/securing_nuts.md)
+- NutCache migration debt ledger: [docs/nutcache_migration_debt.md](docs/nutcache_migration_debt.md)
 - Design notes: [docs/design/](docs/design/) (see [NutCache dev instance](docs/design/nutcache-dev-instance.md))
 - Accepted ADRs:
   - [0001: Mobile App Framework](docs/adrs/Accepted/0001-mobile-app-framework.md)

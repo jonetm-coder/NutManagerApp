@@ -69,16 +69,21 @@ CatalogEntriesCompanion _catalogEntry(
 /// - "Fresh Basil" has no catalog entry at all → can only ever be resolved
 ///   by manual add (LIST-5), demonstrating scanning isn't the only path.
 ///
-/// UREQS: LIST-2, LIST-3, LIST-5, LIST-6, SYNC-1
-final List<ShoppingListItemsCompanion> seedShoppingList = [
-  _listItem('Milk', 'dairy'),
-  _listItem("Thomas's English Mufins", 'bakery'),
-  _listItem('Panko Bread Crumbs', 'pantry'),
-  _listItem('Fresh Basil', 'produce'),
+/// UREQS: LIST-2, LIST-3, LIST-5, LIST-6, LSTORG-2, SYNC-1
+List<ShoppingListItemsCompanion> seedShoppingListItems(int listId) => [
+  _listItem(listId, 'Milk', 'dairy'),
+  _listItem(listId, "Thomas's English Mufins", 'bakery'),
+  _listItem(listId, 'Panko Bread Crumbs', 'pantry'),
+  _listItem(listId, 'Fresh Basil', 'produce'),
 ];
 
-ShoppingListItemsCompanion _listItem(String name, String category) {
+ShoppingListItemsCompanion _listItem(
+  int listId,
+  String name,
+  String category,
+) {
   return ShoppingListItemsCompanion.insert(
+    listId: listId,
     name: name,
     category: category,
     status: ListItemStatus.pending,

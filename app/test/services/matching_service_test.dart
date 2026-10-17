@@ -5,8 +5,10 @@ import 'package:nut_manager_app/services/matching_service.dart';
 ShoppingListItem _item(int id, String name, String category) {
   return ShoppingListItem(
     id: id,
+    listId: 1,
     name: name,
     category: category,
+    quantity: 1,
     status: ListItemStatus.pending,
   );
 }

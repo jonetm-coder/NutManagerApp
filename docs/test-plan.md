@@ -31,7 +31,7 @@ Equipment needed across all four phases. Each phase's section below states which
 |---|---|---|
 | EQ-P1 | Barcode test fixture set: generated barcode images (digital) and printed copies of the same codes | Phase 1 on. See "Barcode Test Fixtures" below — generated, not photographed, so the digital and printed versions are guaranteed identical. A standard home printer is sufficient. |
 | EQ-P2 | A handful of real grocery products with known UPCs, recorded into the seed catalog | Phase 1 on, as a supplement to EQ-P1 for real-world-condition checks (see MT1.7). |
-| EQ-P3 | Mocked shelf price tags, including at least one deliberately handwritten/hard-to-read example | Phase 3. |
+| EQ-P3 | Mocked shelf price tags, including at least one deliberately handwritten/hard-to-read example | Phase 1 (pulled forward with price capture — see that phase's "Pulled forward" note). |
 | EQ-P4 | Sample coupons with a scannable barcode, including at least one with an expiration date and a minimum-quantity restriction | Phase 3. |
 | EQ-P5 | Sample Nutrition Facts panel images/printouts, including at least one for a product deliberately absent from the seed/shared nutrition database | Phase 3. |
 
@@ -59,8 +59,9 @@ Equipment needed across all four phases. Each phase's section below states which
 
 ### Setup
 
-- Equipment: EQ-D1, EQ-N3, EQ-P1, EQ-P2, EQ-A2, EQ-S2, EQ-S4.
+- Equipment: EQ-D1, EQ-N3, EQ-P1, EQ-P2, EQ-P3, EQ-A2, EQ-S2, EQ-S4.
 - NutCache (EQ-N2) is **not** used in this phase — disconnect Tailscale on the test device or shut the `nutcache` VM down, to make sure nothing in Phase 1 accidentally depends on it. Being off the home Wi-Fi is not enough, since Tailscale reaches NutCache from any network.
+- MT1.11 and MT1.12 are the one explicit exception to the airplane-mode default below: they exercise PLOOKUP-1/PLOOKUP-2's external open-product-database lookups, which need genuine internet access (not NutCache, which stays disconnected per the point above). Run those two with Tailscale still off but Wi-Fi/mobile data on.
 - Seed catalog (EQ-A2) populated with entries for every EQ-P1 fixture code plus the EQ-P2 real products, including at least one deliberate near-duplicate pair (e.g., "whole milk" and "2% milk") to exercise ambiguous matching.
 - Barcode fixtures (EQ-P1) generated once via EQ-S4 and committed to `app/test/fixtures/barcodes/`; printed copies made from the same files.
 
@@ -81,6 +82,17 @@ Equipment needed across all four phases. Each phase's section below states which
 | LIST-6 | Category/synonym mapping | AT1.3 |
 | SYNC-1 | Local cache of list + catalog | AT1.6 |
 | SYNC-3 | No action blocked offline | MT1.1, MT1.5, MT1.6 |
+| LSTORG-1 | Multiple named shopping lists | AT1.8, MT1.9 |
+| LSTORG-2 | Add a planned item directly to a list | AT1.8, MT1.9 |
+| LSTORG-3 | Quantity on list items/basket entries, defaulting to 1 | AT1.8 |
+| LSTORG-4 | Archive a list; browse archived lists read-only | AT1.8, MT1.9 |
+| LSTORG-5 | Top-level nav separates Shopping Lists from other sections | MT1.9 |
+| PRICE-1 | Capture price via shelf-tag scan | MT1.10 |
+| PRICE-2 | Manual price entry fallback | MT1.10 |
+| PRICE-3 | Record price with product/store/timestamp | MT1.10 |
+| PRICE-10 | Recognize per-unit vs. total price | AT1.9, MT1.10 |
+| PLOOKUP-1 | "Check Products": external lookup by name to pre-populate catalog | MT1.11 |
+| PLOOKUP-2 | Scan-to-add from home via local/history/external resolution waterfall | AT1.10, MT1.12 |
 
 ### Automated Test Cases
 
@@ -88,11 +100,14 @@ Equipment needed across all four phases. Each phase's section below states which
 |---|---|---|
 | AT1.1 | Barcode→Product lookup, pure logic: known code resolves correctly; unknown code returns "not found"; empty/malformed input handled without crashing. No camera, image, or device dependency. | Unit |
 | AT1.2 | Feed each `app/test/fixtures/barcodes/*.png` fixture to the ML Kit decoder via `InputImage.fromFilePath(...)` on-device; assert the decoded value and the resolved product match the seed catalog for every fixture. | Integration (on-device) |
-| AT1.3 | Matching engine: exact-ID match, normalized-text match, category/synonym fallback (LIST-6), and the confidence threshold that triggers confirmation (feeds AT1.4's UI trigger condition). | Unit |
+| AT1.3 | Matching engine: exact-ID match, normalized-text match, category/synonym fallback (LIST-6), fuzzy/misspelling matching (LIST-6), and the confidence threshold that triggers confirmation (feeds AT1.4's UI trigger condition). | Unit |
 | AT1.4 | Scan-result confirmation UI renders when AT1.3's confidence threshold isn't met; manual-correction flow (SCAN-8) accepts a corrected product and updates state accordingly. | Widget |
-| AT1.5 | Basket state transitions: add via scan, add manually (LIST-5), remove (LIST-4), and the "returns to unfulfilled" behavior when a list-sourced item is removed. | Unit |
+| AT1.5 | Basket state transitions: add via scan, add manually (LIST-5, and that manual entry runs through matching exactly like a scan), remove (LIST-4), and the "returns to unfulfilled" behavior when a list-sourced item is removed. | Unit |
 | AT1.6 | Local cache (SYNC-1) persists the seed list/catalog across an app restart with no network available. | Integration (on-device) |
 | AT1.7 | `flutter analyze` clean; `public_member_api_docs` satisfied; every new public member has a `UREQS:` line tracing to one of this phase's requirement IDs (or `UREQS: none` with reason). | Static analysis |
+| AT1.8 | List organization, pure logic: creating a second named list leaves both active (LSTORG-1); archiving a list removes it from the active set, adds an archive timestamp, and leaves other lists untouched (LSTORG-4); a planned item defaults to quantity 1 and its planned quantity updates independently of a matched basket entry's actual quantity (LSTORG-2, LSTORG-3). | Unit |
+| AT1.9 | Price-tag text parsing (`PriceOcrService.parseText`), pure logic, no camera: a flat total with no unit marker, a per-unit price with a unit marker (e.g. "/lb"), a tag showing both, unit-word normalization, and text with no recognizable price (PRICE-10). | Unit |
+| AT1.10 | Scan-to-add resolution waterfall (`ProductResolutionService`), with a stubbed external-lookup service so no network call occurs: a barcode already in the local catalog resolves there without reaching the external tier; a barcode seen in a past basket entry (any list) resolves via history and is promoted into the catalog; a barcode unknown locally falls through to the (stubbed) external lookup and is promoted into the catalog; a barcode missing from all three tiers resolves to `null` (PLOOKUP-2). | Unit |
 
 ### Manual Test Cases
 
@@ -105,13 +120,19 @@ Run on EQ-D1 with NutCache unreachable (per Setup, above) unless stated otherwis
 | MT1.3 | Scan a product matching exactly one list item. | Item is added to the basket with no confirmation prompt. |
 | MT1.4 | Scan a product where two list items are close matches (e.g., the "whole milk"/"2% milk" pair from Setup). | App asks the user to pick (LIST-3), doesn't guess. |
 | MT1.5 | Remove a basket item that originated from the list. | Item returns to "unfulfilled" on the list view rather than just disappearing. |
-| MT1.6 | Manually add an item the scan flow didn't resolve. | Item appears in the basket. |
+| MT1.6 | Manually add an item the scan flow didn't resolve, typing it in lowercase or with a minor misspelling of an existing list item's name. | Item is still correctly matched/confirmed against the list item (not case-sensitive; fuzzy misspelling match is offered for confirmation, never auto-applied). |
 | MT1.7 | Using EQ-P2 real products (not the flat-printed EQ-P1 fixtures), scan under real-world conditions the fixtures can't cover: a slightly crumpled/curved label, low light, and an angled scan. | App either reads correctly or degrades to "couldn't read, try again"/manual fallback — never silently misreads a code. |
+| MT1.8 | From the app's home screen, navigate to Shopping Lists. | A separate top-level screen is shown, distinct from any specific list (LSTORG-5). |
+| MT1.9 | From the Shopping Lists screen, create a second named list (e.g., "Kroger"), add a planned item with a quantity to it, then archive it. Open the Archived Lists screen. | The new list appears active with its planned item/quantity until archived (LSTORG-1, LSTORG-2, LSTORG-3); after archiving, it appears in the archived list by name/date, opens read-only, and no longer appears in the active list (LSTORG-4). |
+| MT1.10 | On a basket item, scan a real shelf price tag (per-pound, if available) and separately enter a price manually. | Price is captured and shown, with a per-pound price kept distinct from a flat total (PRICE-1, PRICE-2, PRICE-3, PRICE-10); nothing is saved until confirmed. |
+| MT1.11 | With connectivity available, tap "Check Products" on a list with an item not yet in the local catalog. | App queries the external open product database and candidate products are added to the local catalog for that item. |
+| MT1.12 | With connectivity available, use "Scan to Add" from the Shopping Lists screen (not from inside any specific list) to scan a product barcode not already in the local catalog. | The product is identified (via history or external lookup) or, failing that, the app asks for a name; either way the user is then asked which list to add it to. |
 
 ### Exit Criteria
 
-- AT1.1–AT1.7 all passing; MT1.1–MT1.7 executed once on EQ-D1 with no failures.
-- Any Should Have requirement not completed (LIST-5, LIST-6) is explicitly logged as carried into Phase 2, not silently dropped.
+- AT1.1–AT1.10 all passing; MT1.1–MT1.12 executed once on EQ-D1 with no failures.
+- Any Should Have requirement not completed (LIST-5, LIST-6, PLOOKUP-1, PLOOKUP-2) is explicitly logged as carried into Phase 2, not silently dropped.
+- PLOOKUP-1/PLOOKUP-2 query external product databases directly from the phone — a deliberate interim architecture tracked in [docs/nutcache_migration_debt.md](nutcache_migration_debt.md) (MIGRATE-1), not a gap to fix as part of this phase's exit criteria.
 
 ---
 
@@ -195,9 +216,6 @@ Run on EQ-D1 with NutCache unreachable (per Setup, above) unless stated otherwis
 
 | ID | Requirement Gist | Verified By |
 |---|---|---|
-| PRICE-1 | Capture price via shelf-tag scan | AT3.1, MT3.1 |
-| PRICE-2 | Manual price entry fallback | AT3.1, MT3.2 |
-| PRICE-3 | Record price with product/store/timestamp | AT3.1, MT3.1 |
 | PRICE-4 | Compare price across stores | MT3.8 |
 | PRICE-5 | Configure comparison radius/stores | MT3.8 |
 | PRICE-6 | Offline: last-synced price + timestamp | MT3.9 |
@@ -224,7 +242,7 @@ Run on EQ-D1 with NutCache unreachable (per Setup, above) unless stated otherwis
 
 | ID | Description | Type |
 |---|---|---|
-| AT3.1 | Shelf-tag and coupon-barcode OCR/parsing (PRICE-1, COUP-1) against a fixture set of sample label images, including one deliberately illegible price tag that must trigger the manual-entry fallback (PRICE-2) rather than a wrong guess. | Integration (on-device) |
+| AT3.1 | Coupon-barcode OCR/parsing (COUP-1) against a fixture set of sample coupon images. (Shelf-tag price OCR/parsing moved to Phase 1's AT1.9/MT1.10 along with the rest of price capture — see that phase's "Pulled forward" note.) | Integration (on-device) |
 | AT3.2 | Coupon restriction logic (COUP-3): separate passing/failing cases for expiration, quantity threshold, and variant exclusion. | Unit |
 | AT3.3 | Same-category near-miss warning (COUP-5): coupon on file for product A in category C; scanning product B in category C fires the warning and does not auto-apply anything. | Unit |
 | AT3.4 | Goal-matching evaluator (NUTL-1): given a nutrient target (PLAN-1) and a product's nutrition data, verify pass/fail/boundary cases for min-only, max-only, and range target types. | Unit |
@@ -233,10 +251,10 @@ Run on EQ-D1 with NutCache unreachable (per Setup, above) unless stated otherwis
 
 ### Manual Test Cases
 
+*MT3.1 and MT3.2 (shelf price tag scanning/manual entry) moved to Phase 1's MT1.10 along with the rest of price capture — see that phase's "Pulled forward" note. IDs intentionally left unrenumbered to avoid relabeling unrelated cases below.*
+
 | ID | Steps | Expected Result |
 |---|---|---|
-| MT3.1 | Scan a clearly printed shelf price tag (EQ-P3). | Price captured, associated with correct product/store/timestamp (PRICE-3). |
-| MT3.2 | Scan the deliberately handwritten/hard-to-read price tag from EQ-P3. | OCR either extracts it correctly or cleanly falls back to manual entry — never silently records a wrong price. |
 | MT3.3 | With a coupon (EQ-P4) on file for a specific product, scan that exact product. | Coupon surfaced for confirmation, not auto-applied (COUP-4). |
 | MT3.4 | With the same coupon on file, scan a *different* product in the same category. | Near-miss warning appears, clearly naming the coupon and the original product. |
 | MT3.5 | With a nutrient target configured (e.g., "sodium ≤ 500 mg per serving"), scan a product exceeding it, in airplane mode. | Clear per-member warning shown, fully offline. |
@@ -247,7 +265,7 @@ Run on EQ-D1 with NutCache unreachable (per Setup, above) unless stated otherwis
 
 ### Exit Criteria
 
-- AT3.1–AT3.6 and MT3.1–MT3.9 all passing.
+- AT3.1–AT3.6 and MT3.3–MT3.9 all passing.
 - COUP-5 and NUTL-1's pass/fail thresholds reviewed by a person against real products (not just unit-tested), since these are the first features whose *correctness*, not just functionality, directly affects user trust.
 - PRICE-9/NUTL-3/NUTL-4 logged as carried forward per the note above.
 

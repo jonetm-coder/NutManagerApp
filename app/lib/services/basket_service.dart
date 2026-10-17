@@ -5,34 +5,44 @@ import 'package:flutter/foundation.dart';
 
 import '../data/database.dart';
 
-/// Holds the current shopping list and basket state, backed by [AppDatabase]
+/// Holds one shopping list's items and basket, backed by [AppDatabase]
 /// (SYNC-1), and notifies listeners when either changes.
+///
+/// Scoped to a single [listId] (LSTORG-1) — the app can have several
+/// shopping lists; each open list screen gets its own `BasketService`
+/// instance rather than one global instance covering everything.
 ///
 /// Phase 1 keeps this simple — a single `ChangeNotifier`, no external
 /// state-management package — since there's no cloud data stream yet to
 /// justify one. Revisit this if/when Phase 2's cloud sync makes plain
 /// `ChangeNotifier` awkward, not before.
 ///
-/// UREQS: LIST-2, LIST-4, LIST-5, SYNC-1
+/// UREQS: LIST-2, LIST-4, LIST-5, LSTORG-1, LSTORG-2, SYNC-1
 class BasketService extends ChangeNotifier {
-  /// Creates the service and loads current state from [_database].
+  /// Creates the service for [listId] and loads current state from
+  /// [_database].
   ///
-  /// UREQS: SYNC-1
-  BasketService(this._database) {
+  /// UREQS: LSTORG-1, SYNC-1
+  BasketService(this._database, this.listId) {
     unawaited(_reload());
   }
 
   final AppDatabase _database;
 
+  /// The shopping list this service's items/basket belong to.
+  ///
+  /// UREQS: LSTORG-1
+  final int listId;
+
   List<ShoppingListItem> _listItems = [];
   List<BasketEntry> _basketEntries = [];
 
-  /// All shopping list items, pending or found.
+  /// All of this list's items, pending or found.
   ///
   /// UREQS: LIST-2
   List<ShoppingListItem> get listItems => List.unmodifiable(_listItems);
 
-  /// Shopping list items not yet matched to a basket entry — the candidate
+  /// This list's items not yet matched to a basket entry — the candidate
   /// pool [MatchingService] matches against.
   ///
   /// UREQS: LIST-2, LIST-3
@@ -40,10 +50,33 @@ class BasketService extends ChangeNotifier {
       .where((item) => item.status == ListItemStatus.pending)
       .toList();
 
-  /// Everything currently in the basket.
+  /// Everything currently in this list's basket.
   ///
   /// UREQS: LIST-4
   List<BasketEntry> get basketEntries => List.unmodifiable(_basketEntries);
+
+  /// Adds a planned item to the list itself (not the basket) — e.g.
+  /// entered at home before a trip, independent of scanning.
+  ///
+  /// UREQS: LSTORG-2
+  Future<void> addPlannedItem(
+    String name, {
+    String category = 'other',
+    int quantity = 1,
+  }) async {
+    await _database
+        .into(_database.shoppingListItems)
+        .insert(
+          ShoppingListItemsCompanion.insert(
+            listId: listId,
+            name: name,
+            category: category,
+            quantity: Value(quantity),
+            status: ListItemStatus.pending,
+          ),
+        );
+    await _reload();
+  }
 
   /// Adds [product] to the basket. If [matchedItem] is given, that list
   /// item is marked found (LIST-2); if `null`, the entry is added with no
@@ -53,11 +86,13 @@ class BasketService extends ChangeNotifier {
   Future<void> addFromMatch({
     required CatalogEntry product,
     ShoppingListItem? matchedItem,
+    int quantity = 1,
   }) async {
     await _addEntry(
       productName: product.name,
       barcode: product.barcode,
       matchedItem: matchedItem,
+      quantity: quantity,
     );
   }
 
@@ -74,24 +109,35 @@ class BasketService extends ChangeNotifier {
   /// method never attempting to match in the first place.
   ///
   /// UREQS: LIST-5
-  Future<void> addManually(String name, {ShoppingListItem? matchedItem}) {
-    return _addEntry(productName: name, matchedItem: matchedItem);
+  Future<void> addManually(
+    String name, {
+    ShoppingListItem? matchedItem,
+    int quantity = 1,
+  }) {
+    return _addEntry(
+      productName: name,
+      matchedItem: matchedItem,
+      quantity: quantity,
+    );
   }
 
   Future<void> _addEntry({
     required String productName,
     String? barcode,
     ShoppingListItem? matchedItem,
+    int quantity = 1,
   }) async {
     await _database
         .into(_database.basketEntries)
         .insert(
           BasketEntriesCompanion.insert(
+            listId: listId,
             productName: productName,
             barcode: barcode == null ? const Value.absent() : Value(barcode),
             listItemId: matchedItem == null
                 ? const Value.absent()
                 : Value(matchedItem.id),
+            quantity: Value(quantity),
           ),
         );
     if (matchedItem != null) {
@@ -116,6 +162,59 @@ class BasketService extends ChangeNotifier {
     await _reload();
   }
 
+  /// Updates a basket entry's actual quantity (e.g. only found 1 of the 2
+  /// planned). Independent of the linked list item's planned quantity, if
+  /// any.
+  ///
+  /// UREQS: LSTORG-2
+  Future<void> updateBasketQuantity(BasketEntry entry, int quantity) async {
+    await (_database.update(
+      _database.basketEntries,
+    )..where((row) => row.id.equals(entry.id))).write(
+      BasketEntriesCompanion(quantity: Value(quantity)),
+    );
+    await _reload();
+  }
+
+  /// Updates a list item's planned quantity.
+  ///
+  /// UREQS: LSTORG-2
+  Future<void> updateListItemQuantity(
+    ShoppingListItem item,
+    int quantity,
+  ) async {
+    await (_database.update(
+      _database.shoppingListItems,
+    )..where((row) => row.id.equals(item.id))).write(
+      ShoppingListItemsCompanion(quantity: Value(quantity)),
+    );
+    await _reload();
+  }
+
+  /// Records a captured price on [entry] — either or both of [unitPrice]
+  /// (with [unitLabel], e.g. "lb") and [totalPrice] may be given. Always
+  /// called with values the user has confirmed (PriceOcrService's OCR
+  /// output is a starting point shown for editing, never saved directly).
+  ///
+  /// UREQS: PRICE-1, PRICE-2, PRICE-10
+  Future<void> setPrice(
+    BasketEntry entry, {
+    double? unitPrice,
+    String? unitLabel,
+    double? totalPrice,
+  }) async {
+    await (_database.update(
+      _database.basketEntries,
+    )..where((row) => row.id.equals(entry.id))).write(
+      BasketEntriesCompanion(
+        unitPrice: Value(unitPrice),
+        unitLabel: Value(unitLabel),
+        totalPrice: Value(totalPrice),
+      ),
+    );
+    await _reload();
+  }
+
   Future<void> _markFound(int listItemId) {
     return (_database.update(
       _database.shoppingListItems,
@@ -133,8 +232,14 @@ class BasketService extends ChangeNotifier {
   }
 
   Future<void> _reload() async {
-    _listItems = await _database.select(_database.shoppingListItems).get();
-    _basketEntries = await _database.select(_database.basketEntries).get();
+    _listItems =
+        await (_database.select(
+          _database.shoppingListItems,
+        )..where((row) => row.listId.equals(listId))).get();
+    _basketEntries =
+        await (_database.select(
+          _database.basketEntries,
+        )..where((row) => row.listId.equals(listId))).get();
     notifyListeners();
   }
 }

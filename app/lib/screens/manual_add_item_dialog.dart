@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
 
-/// Lets the user manually add an item to the basket when scanning can't
-/// resolve it — e.g., "Fresh Basil" in the Phase 1 seed data, which has no
-/// catalog entry at all and so can only ever be resolved this way.
+/// Lets the user manually enter an item name and quantity — used both to
+/// add an item straight to the basket when scanning can't resolve it
+/// (LIST-5), and to add a planned item to a list ahead of a trip
+/// (LSTORG-2). Returns `(name, quantity)`, or `null` if cancelled.
 ///
-/// UREQS: LIST-5
+/// UREQS: LIST-5, LSTORG-2
 class ManualAddItemDialog extends StatefulWidget {
-  /// Creates the dialog.
+  /// Creates the dialog. [title] lets callers distinguish "Add to Basket"
+  /// from "Add to List" in the UI even though the underlying dialog is
+  /// shared.
   ///
-  /// UREQS: LIST-5
-  const ManualAddItemDialog({super.key});
+  /// UREQS: LIST-5, LSTORG-2
+  const ManualAddItemDialog({super.key, this.title = 'Add item'});
+
+  /// The dialog's title.
+  ///
+  /// UREQS: LIST-5, LSTORG-2
+  final String title;
 
   @override
   State<ManualAddItemDialog> createState() => _ManualAddItemDialogState();
@@ -17,6 +25,7 @@ class ManualAddItemDialog extends StatefulWidget {
 
 class _ManualAddItemDialogState extends State<ManualAddItemDialog> {
   final _controller = TextEditingController();
+  int _quantity = 1;
 
   @override
   void dispose() {
@@ -27,12 +36,38 @@ class _ManualAddItemDialogState extends State<ManualAddItemDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Add item'),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        decoration: const InputDecoration(hintText: 'Item name'),
-        onSubmitted: (_) => _submit(context),
+      title: Text(widget.title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'Item name'),
+            onSubmitted: (_) => _submit(context),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('Quantity'),
+              const SizedBox(width: 16),
+              IconButton(
+                icon: const Icon(Icons.remove_circle_outline),
+                tooltip: 'Decrease quantity',
+                onPressed: _quantity > 1
+                    ? () => setState(() => _quantity--)
+                    : null,
+              ),
+              Text('$_quantity', style: Theme.of(context).textTheme.titleMedium),
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline),
+                tooltip: 'Increase quantity',
+                onPressed: () => setState(() => _quantity++),
+              ),
+            ],
+          ),
+        ],
       ),
       actions: [
         TextButton(
@@ -52,6 +87,6 @@ class _ManualAddItemDialogState extends State<ManualAddItemDialog> {
     if (name.isEmpty) {
       return;
     }
-    Navigator.of(context).pop(name);
+    Navigator.of(context).pop((name, _quantity));
   }
 }

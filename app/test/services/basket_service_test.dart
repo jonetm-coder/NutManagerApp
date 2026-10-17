@@ -14,9 +14,12 @@ void main() {
 
     setUp(() async {
       database = AppDatabase(NativeDatabase.memory());
-      service = BasketService(database);
       // The seed data is inserted asynchronously in AppDatabase's onCreate;
-      // let that finish before each test starts.
+      // let that finish before reading the seeded list's id.
+      await _flushMicrotasks();
+      final seededList = await database.select(database.shoppingLists).getSingle();
+      service = BasketService(database, seededList.id);
+      // Likewise for the service's own constructor-triggered reload.
       await _flushMicrotasks();
     });
 

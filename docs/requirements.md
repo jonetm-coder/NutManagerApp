@@ -45,6 +45,18 @@ Acceptance criteria are left blank where not yet known; they should be filled in
 | LIST-6 | The app shall maintain a category/synonym mapping used to bridge differences in wording between scanned products and shopping list text. | Should Have | | ADR 0004 |
 | LIST-7 | Multiple members of the same household shall be able to view and edit a shared shopping list. | Must Have | | ADR 0006, ADR 0007 |
 
+## Shopping List Organization
+
+| ID | Requirement | Priority | Acceptance Criteria | Source |
+|---|---|---|---|---|
+| LSTORG-1 | The user shall be able to create and maintain multiple named shopping lists (typically one per store planned to be shopped at). | Must Have | | *(derived; not yet documented in an ADR — see note below)* |
+| LSTORG-2 | The user shall be able to add a planned item (name, category, quantity) directly to a list before a trip, independent of scanning/matching. | Must Have | Given a list open at home, the user can add an item by name and quantity; it appears as a pending list item, not a basket entry. | *(derived)* |
+| LSTORG-3 | Each shopping list item and basket entry shall have a quantity, defaulting to 1 when not specified. | Must Have | | *(derived)* |
+| LSTORG-4 | The user shall be able to mark a shopping list as archived once shopping is complete, and browse archived lists separately (by name/date) in a read-only view. | Must Have | | *(derived)* |
+| LSTORG-5 | The app's top-level navigation shall separate "Shopping Lists" from other (future) sections, rather than opening directly into a single implicit list. | Must Have | | *(derived)* |
+
+*Note:* LSTORG-1 through LSTORG-5 were identified during implementation, not derived from an existing ADR. They're low-risk UI/data-model decisions (how many lists, archiving, top-level navigation structure) rather than decisions with cross-cutting consequences, so no ADR was written for them — consistent with how LIST-4 was handled. Revisit if a future change here raises a nontrivial design question.
+
 ## Offline Operation & Sync
 
 | ID | Requirement | Priority | Acceptance Criteria | Source |
@@ -76,6 +88,7 @@ Acceptance criteria are left blank where not yet known; they should be filled in
 | PRICE-7 | The system shall maintain a shared, cross-household historical pricing dataset without attaching personally identifying information to contributed price observations. | Must Have | | ADR 0011 |
 | PRICE-8 | The app shall allow a user to opt out of contributing their own scanned price data to the shared dataset, without losing the ability to view shared price history. | Must Have | | ADR 0011 |
 | PRICE-9 | The system shall apply basic validation (e.g., outlier detection) to submitted price data before it is shown to other users. | Should Have | | ADR 0011 |
+| PRICE-10 | When capturing a price, the app shall recognize and distinguish a per-unit price (e.g., $/lb, for items like meat sold by weight) from a flat total price, and allow the user to confirm/correct either before saving. | Must Have | Given a shelf tag or price label showing a per-pound price, OCR pre-fills the per-unit price and unit (editable), distinct from a flat total price field; neither is saved until the user confirms. | ADR 0008 |
 
 ## Coupons
 
@@ -96,6 +109,15 @@ Acceptance criteria are left blank where not yet known; they should be filled in
 | BC-2 | The system shall keep store-scoped barcode mappings isolated per store and never surface them as a match at a different store. | Must Have | | ADR 0012 |
 | BC-3 | The system shall support crowdsourced correction of barcode mappings, with mitigation against erroneous or bad-faith submissions (e.g., requiring multi-contributor corroboration). | Should Have | | ADR 0012 |
 | BC-4 | A relevant subset of the barcode database shall be synced to the device for offline lookup. | Must Have | | ADR 0005, ADR 0012 |
+
+## External Product Lookup
+
+| ID | Requirement | Priority | Acceptance Criteria | Source |
+|---|---|---|---|---|
+| PLOOKUP-1 | The user shall be able to trigger a "Check Products" action on a shopping list that searches external open product databases by item name to find and pre-populate candidate barcode mappings before a shopping trip. | Should Have | | ADR 0012 (intent), SCAN-10 |
+| PLOOKUP-2 | The user shall be able to scan a product's barcode outside the context of an open shopping list (e.g., at home) and add it to a list of their choice; the app shall resolve the barcode using the local catalog first, then this household's purchase history, then an external open product database, before falling back to manual entry. | Should Have | Given a barcode not in the local catalog but seen before in any (active or archived) list, scanning it again resolves without a network call. | ADR 0012 (intent), SCAN-8, SCAN-10 |
+
+*Note:* PLOOKUP-1 and PLOOKUP-2 implement the *intent* of SCAN-9/SCAN-10 (crowdsourced and open-data-seeded barcode mappings) and BC-1 (a shared barcode database) ahead of NutCache existing to host that shared database centrally. The current implementation queries external databases directly from the phone rather than through a central service — a deliberate, tracked interim architecture; see [docs/nutcache_migration_debt.md](nutcache_migration_debt.md) (MIGRATE-1).
 
 ## Nutrition Label Reading & In-Store Goal Matching
 

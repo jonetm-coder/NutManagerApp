@@ -41,11 +41,19 @@ dependencies:
   path_provider: ^2.1.4
   path: ^1.9.0
 
-  # Barcode scanning (SCAN-1), per ADR 0003. Not yet wired into any screen —
-  # added now so Stage 2 (camera scan screen) doesn't need a separate
-  # pubspec change.
+  # Barcode scanning (SCAN-1), per ADR 0003.
   camera: ^0.11.0
   google_mlkit_barcode_scanning: ^0.13.0
+
+  # Price-tag OCR (PRICE-1/PRICE-10), the text-recognition half of the
+  # ML Kit choice in ADR 0003 (barcode scanning above was the other half).
+  google_mlkit_text_recognition: ^0.14.0
+
+  # External product lookup (Open Food Facts / UPCitemdb) for "Check
+  # Products" and scan-to-add's resolution waterfall — see
+  # docs/nutcache_migration_debt.md for why this calls external APIs
+  # directly from the phone for now instead of going through NutCache.
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:

@@ -2,6 +2,11 @@
     <!-- Product-label scanning (SCAN-1/PLAT-3, ADR 0002/0003). -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="true" />
+    <!-- External product lookup (PLOOKUP-1/PLOOKUP-2) — Open Food Facts /
+         UPCitemdb. Phase 1's in-store scanning stays fully offline; this is
+         only used for the explicitly-online "Check Products" and
+         scan-to-add flows. See docs/nutcache_migration_debt.md. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="nut_manager_app"
         android:name="${applicationName}"

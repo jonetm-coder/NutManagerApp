@@ -68,14 +68,26 @@ class ScannerService {
   /// satisfied by construction: this never makes a network call).
   ///
   /// UREQS: SCAN-1, SCAN-4
-  Future<String?> captureAndDecode() async {
+  Future<String?> captureAndDecode() => captureAndProcess(decodeImageFile);
+
+  /// Captures a still frame and runs [process] on the resulting file path,
+  /// cleaning the temporary file up afterward either way. Generalizes
+  /// [captureAndDecode] (which passes [decodeImageFile]) so other capture
+  /// steps — price-tag OCR via `PriceOcrService.scanImageFile` (PRICE-1)
+  /// — can reuse the same camera/cleanup handling rather than duplicating
+  /// it.
+  ///
+  /// UREQS: SCAN-1, PRICE-1
+  Future<T?> captureAndProcess<T>(
+    Future<T?> Function(String path) process,
+  ) async {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) {
       return null;
     }
     final file = await controller.takePicture();
     try {
-      return await decodeImageFile(file.path);
+      return await process(file.path);
     } finally {
       unawaited(_deleteQuietly(file.path));
     }

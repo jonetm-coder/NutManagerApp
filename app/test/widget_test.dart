@@ -13,6 +13,11 @@ void main() {
     await tester.pumpWidget(NutManagerApp(database: database));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.text('Shopping Lists'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('My First List'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Milk'), findsOneWidget);
     expect(find.text('Panko Bread Crumbs'), findsOneWidget);
     expect(find.text('Nothing in the basket yet.'), findsOneWidget);

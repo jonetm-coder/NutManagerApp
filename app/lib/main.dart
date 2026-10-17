@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'data/database.dart';
-import 'screens/shopping_list_screen.dart';
-import 'services/barcode_lookup_service.dart';
-import 'services/basket_service.dart';
+import 'screens/home_screen.dart';
 
 void main() {
   runApp(NutManagerApp(database: AppDatabase()));
@@ -16,19 +14,15 @@ class NutManagerApp extends StatelessWidget {
   /// Creates the root widget, backed by [database].
   ///
   /// UREQS: PLAT-1, SYNC-1
-  NutManagerApp({super.key, required AppDatabase database})
-    : basketService = BasketService(database),
-      barcodeLookup = BarcodeLookupService(database);
+  const NutManagerApp({super.key, required this.database});
 
-  /// The basket/list state shared across the app.
+  /// The app's local database, passed down to whichever screen needs it —
+  /// no single global `BasketService` any more now that the app has
+  /// multiple lists (LSTORG-1); each list screen owns its own, scoped to
+  /// that list's id.
   ///
-  /// UREQS: LIST-2, LIST-4, LIST-5
-  final BasketService basketService;
-
-  /// Resolves a decoded barcode to a catalog product.
-  ///
-  /// UREQS: SCAN-1
-  final BarcodeLookupService barcodeLookup;
+  /// UREQS: SYNC-1, LSTORG-1
+  final AppDatabase database;
 
   @override
   Widget build(BuildContext context) {
@@ -37,10 +31,7 @@ class NutManagerApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
       ),
-      home: ShoppingListScreen(
-        basketService: basketService,
-        barcodeLookup: barcodeLookup,
-      ),
+      home: HomeScreen(database: database),
     );
   }
 }

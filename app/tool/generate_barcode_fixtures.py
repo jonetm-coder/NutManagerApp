@@ -24,8 +24,8 @@ from PIL import Image, ImageDraw, ImageFont
 SEED_CATALOG = [
     ("100000000014", "Whole Milk, 1 Gal"),
     ("100000000021", "2% Milk, 1 Gal"),
-    ("100000000038", "Chocolate Chip Cookies"),
-    ("100000000045", "Cheerios Cereal"),
+    ("100000000038", "Thomas's English Muffins"),
+    ("100000000045", "Panko Bread Crumbs"),
     ("100000000052", "Creamy Peanut Butter"),
     ("100000000069", "Sourdough Bread"),
     ("100000000076", "Large Eggs, Dozen"),

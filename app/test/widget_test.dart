@@ -14,7 +14,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Milk'), findsOneWidget);
-    expect(find.text('Cheerios Cereal'), findsOneWidget);
+    expect(find.text('Panko Bread Crumbs'), findsOneWidget);
     expect(find.text('Nothing in the basket yet.'), findsOneWidget);
   });
 }

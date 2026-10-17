@@ -22,8 +22,8 @@ import 'database.dart';
 final List<CatalogEntriesCompanion> seedCatalog = [
   _catalogEntry('100000000014', 'Whole Milk, 1 Gal', 'dairy'),
   _catalogEntry('100000000021', '2% Milk, 1 Gal', 'dairy'),
-  _catalogEntry('100000000038', 'Chocolate Chip Cookies', 'snacks'),
-  _catalogEntry('100000000045', 'Cheerios Cereal', 'cereal'),
+  _catalogEntry('100000000038', "Thomas's English Muffins", 'bakery'),
+  _catalogEntry('100000000045', 'Panko Bread Crumbs', 'pantry'),
   _catalogEntry('100000000052', 'Creamy Peanut Butter', 'pantry'),
   _catalogEntry('100000000069', 'Sourdough Bread', 'bakery'),
   _catalogEntry('100000000076', 'Large Eggs, Dozen', 'dairy'),
@@ -47,19 +47,33 @@ CatalogEntriesCompanion _catalogEntry(
 }
 
 /// Phase 1 seed shopping list, deliberately covering every matching path
-/// the engine (LIST-2/LIST-3/LIST-6) needs to handle:
+/// the engine (LIST-2/LIST-3/LIST-6) needs to handle. Product names here
+/// are real items a tester is likely to actually have at home, so the
+/// barcode fixtures in `app/test/fixtures/barcodes/` can be printed and
+/// scanned against real products, not just the fixture images:
 ///
 /// - "Milk" ties between two catalog entries → ambiguous match (LIST-3).
-/// - "Choc Chip Cookies" only matches via synonym expansion (LIST-6).
-/// - "Cheerios Cereal" matches a catalog entry exactly (LIST-2).
+/// - "Thomas's English Mufins" (deliberate typo, missing one "f") still
+///   confidently matches the catalog's "Thomas's English Muffins" — but
+///   via ordinary Jaccard token overlap (3 of the item's 4 tokens are
+///   still an exact match; only the misspelled word differs), not via
+///   MatchingService's separate fuzzy/misspelling path. A single-word
+///   typo is what actually isolates that fuzzy path — see
+///   test/services/matching_service_test.dart's "Yogurt"/"Yogurrt" case —
+///   since a multi-word phrase gets partial credit from its other shared
+///   words before fuzzy scoring is even reached. This item is still a
+///   useful real-world case on its own: manual entry not running through
+///   the matching engine at all (not case-sensitivity) was the actual
+///   Phase 1 bug this seed data was expanded to cover.
+/// - "Panko Bread Crumbs" matches a catalog entry exactly (LIST-2).
 /// - "Fresh Basil" has no catalog entry at all → can only ever be resolved
 ///   by manual add (LIST-5), demonstrating scanning isn't the only path.
 ///
 /// UREQS: LIST-2, LIST-3, LIST-5, LIST-6, SYNC-1
 final List<ShoppingListItemsCompanion> seedShoppingList = [
   _listItem('Milk', 'dairy'),
-  _listItem('Choc Chip Cookies', 'snacks'),
-  _listItem('Cheerios Cereal', 'cereal'),
+  _listItem("Thomas's English Mufins", 'bakery'),
+  _listItem('Panko Bread Crumbs', 'pantry'),
   _listItem('Fresh Basil', 'produce'),
 ];
 

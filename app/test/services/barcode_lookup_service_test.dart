@@ -21,7 +21,7 @@ void main() {
     test('resolves a known seeded barcode to the correct product', () async {
       final result = await service.lookup('100000000045');
       expect(result, isNotNull);
-      expect(result!.name, 'Cheerios Cereal');
+      expect(result!.name, 'Panko Bread Crumbs');
     });
 
     test('returns null for a barcode not in the catalog', () async {

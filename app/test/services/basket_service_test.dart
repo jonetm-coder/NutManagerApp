@@ -27,28 +27,28 @@ void main() {
     test(
       'adding a scanned product matched to a list item marks it found',
       () async {
-        final cheerios = await (database.select(
+        final panko = await (database.select(
           database.catalogEntries,
         )..where((row) => row.barcode.equals('100000000045'))).getSingle();
-        final cheeriosItem = service.pendingItems.firstWhere(
-          (item) => item.name == 'Cheerios Cereal',
+        final pankoItem = service.pendingItems.firstWhere(
+          (item) => item.name == 'Panko Bread Crumbs',
         );
 
         await service.addFromMatch(
-          product: cheerios,
-          matchedItem: cheeriosItem,
+          product: panko,
+          matchedItem: pankoItem,
         );
 
         expect(
           service.basketEntries.map((e) => e.productName),
-          contains('Cheerios Cereal'),
+          contains('Panko Bread Crumbs'),
         );
         expect(
-          service.listItems.firstWhere((i) => i.id == cheeriosItem.id).status,
+          service.listItems.firstWhere((i) => i.id == pankoItem.id).status,
           ListItemStatus.found,
         );
         expect(
-          service.pendingItems.any((i) => i.id == cheeriosItem.id),
+          service.pendingItems.any((i) => i.id == pankoItem.id),
           isFalse,
         );
       },
@@ -83,23 +83,46 @@ void main() {
       },
     );
 
+    test(
+      'manual add with a matched item links it and marks the list item '
+      'found, same as a scanned match — regression test for the bug where '
+      'manual entry never attempted to match the list at all',
+      () async {
+        final pankoItem = service.pendingItems.firstWhere(
+          (item) => item.name == 'Panko Bread Crumbs',
+        );
+
+        await service.addManually('panko bread crumbs', matchedItem: pankoItem);
+
+        final entry = service.basketEntries.singleWhere(
+          (e) => e.productName == 'panko bread crumbs',
+        );
+        expect(entry.listItemId, pankoItem.id);
+        expect(entry.barcode, isNull);
+        expect(
+          service.listItems.firstWhere((i) => i.id == pankoItem.id).status,
+          ListItemStatus.found,
+        );
+      },
+    );
+
     test('removing a list-linked basket entry returns the item to pending (LIST-4)', () async {
-      final cheerios = await (database.select(
+      final panko = await (database.select(
         database.catalogEntries,
       )..where((row) => row.barcode.equals('100000000045'))).getSingle();
-      final cheeriosItem = service.pendingItems.firstWhere(
-        (item) => item.name == 'Cheerios Cereal',
+      final pankoItem = service.pendingItems.firstWhere(
+        (item) => item.name == 'Panko Bread Crumbs',
       );
-      await service.addFromMatch(product: cheerios, matchedItem: cheeriosItem);
+      await service.addFromMatch(product: panko, matchedItem: pankoItem);
       final entry = service.basketEntries.singleWhere(
-        (e) => e.productName == 'Cheerios Cereal',
+        (e) => e.productName == 'Panko Bread Crumbs',
       );
 
       await service.remove(entry);
 
       expect(service.basketEntries.any((e) => e.id == entry.id), isFalse);
       expect(
-        service.listItems.firstWhere((i) => i.id == cheeriosItem.id).status,
+        service.listItems.firstWhere((i) => i.id == pankoItem.id).status,
         ListItemStatus.pending,
       );
     });

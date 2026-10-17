@@ -54,12 +54,41 @@ class BasketService extends ChangeNotifier {
     required CatalogEntry product,
     ShoppingListItem? matchedItem,
   }) async {
+    await _addEntry(
+      productName: product.name,
+      barcode: product.barcode,
+      matchedItem: matchedItem,
+    );
+  }
+
+  /// Adds a basket entry manually, with no scan involved — the fallback
+  /// path for an item scanning can't resolve (e.g., no catalog entry at
+  /// all, per the "Fresh Basil" seed example).
+  ///
+  /// [matchedItem], if given, links the entry to that list item exactly
+  /// like [addFromMatch] does (LIST-2) — callers should run the typed
+  /// [name] through [MatchingService] first and pass the result here
+  /// rather than always adding an unlinked entry. Skipping that step was
+  /// a real Phase 1 bug: a manually-typed name never matched the list at
+  /// all, which looked like a case-sensitivity bug but was actually this
+  /// method never attempting to match in the first place.
+  ///
+  /// UREQS: LIST-5
+  Future<void> addManually(String name, {ShoppingListItem? matchedItem}) {
+    return _addEntry(productName: name, matchedItem: matchedItem);
+  }
+
+  Future<void> _addEntry({
+    required String productName,
+    String? barcode,
+    ShoppingListItem? matchedItem,
+  }) async {
     await _database
         .into(_database.basketEntries)
         .insert(
           BasketEntriesCompanion.insert(
-            productName: product.name,
-            barcode: Value(product.barcode),
+            productName: productName,
+            barcode: barcode == null ? const Value.absent() : Value(barcode),
             listItemId: matchedItem == null
                 ? const Value.absent()
                 : Value(matchedItem.id),
@@ -68,18 +97,6 @@ class BasketService extends ChangeNotifier {
     if (matchedItem != null) {
       await _markFound(matchedItem.id);
     }
-    await _reload();
-  }
-
-  /// Adds a basket entry manually, with no scan involved — the fallback
-  /// path for an item scanning can't resolve (e.g., no catalog entry at
-  /// all, per the "Fresh Basil" seed example).
-  ///
-  /// UREQS: LIST-5
-  Future<void> addManually(String name) async {
-    await _database
-        .into(_database.basketEntries)
-        .insert(BasketEntriesCompanion.insert(productName: name));
     await _reload();
   }
 

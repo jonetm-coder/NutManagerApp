@@ -112,5 +112,62 @@ void main() {
 
       expect(result.outcome, MatchOutcome.none);
     });
+
+    test('matching is not case-sensitive', () {
+      final result = service.match(
+        productName: 'milk',
+        pendingItems: [_item(1, 'Milk', 'dairy')],
+      );
+
+      expect(result.outcome, MatchOutcome.confident);
+      expect(result.candidates.single.score, 1.0);
+    });
+
+    test(
+      'a null category (manual entry, SCAN-8) skips the category fallback '
+      'without erroring, and still matches via token overlap',
+      () {
+        final result = service.match(
+          productName: 'Panko Bread Crumbs',
+          pendingItems: [_item(1, 'Panko Bread Crumbs', 'pantry')],
+        );
+
+        expect(result.outcome, MatchOutcome.confident);
+      },
+    );
+
+    test(
+      'a genuine misspelling fuzzy-matches but is always ambiguous, never '
+      'confident (LIST-6) — the bug report this came from',
+      () {
+        // A single-word typo, deliberately: a multi-word phrase with one
+        // misspelled word (e.g. "English Mufins" vs "English Muffins")
+        // would already clear the confident threshold via ordinary Jaccard
+        // token overlap on the other shared words, without ever
+        // exercising the fuzzy path this test is actually checking. A
+        // single word gives tokenize() zero token overlap (two entirely
+        // different one-token sets), isolating the fuzzy comparison.
+        final result = service.match(
+          productName: 'Yogurt',
+          pendingItems: [_item(1, 'Yogurrt', 'dairy')], // one extra "r"
+        );
+
+        expect(result.outcome, MatchOutcome.ambiguous);
+        expect(result.candidates, hasLength(1));
+        expect(
+          result.candidates.single.score,
+          lessThan(MatchingService.confidentThreshold),
+        );
+      },
+    );
+
+    test('a string too different to be a plausible misspelling is no match', () {
+      final result = service.match(
+        productName: 'Orange Juice',
+        pendingItems: [_item(1, 'Panko Bread Crumbs', 'pantry')],
+      );
+
+      expect(result.outcome, MatchOutcome.none);
+    });
   });
 }

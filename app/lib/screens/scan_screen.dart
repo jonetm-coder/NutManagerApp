@@ -8,7 +8,7 @@ import '../services/barcode_lookup_service.dart';
 import '../services/basket_service.dart';
 import '../services/matching_service.dart';
 import '../services/scanner_service.dart';
-import 'manual_add_item_dialog.dart';
+import 'manual_add_flow.dart';
 import 'match_confirmation_dialog.dart';
 
 /// The camera scan screen: captures a frame on demand, decodes a barcode
@@ -106,14 +106,13 @@ class _ScanScreenState extends State<ScanScreen> {
     }
 
     if (product == null) {
-      // SCAN-8: not found in the catalog, fall through to manual entry.
-      final name = await showDialog<String>(
+      // SCAN-8: not found in the catalog, fall through to manual entry —
+      // which itself attempts to match the typed name against the list
+      // (see manual_add_flow.dart) rather than always adding unlinked.
+      await showManualAddFlow(
         context: context,
-        builder: (context) => const ManualAddItemDialog(),
+        basketService: widget.basketService,
       );
-      if (name != null) {
-        await widget.basketService.addManually(name);
-      }
       if (mounted) {
         Navigator.of(context).pop();
       }

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/database.dart';
 import '../services/barcode_lookup_service.dart';
 import '../services/basket_service.dart';
-import 'manual_add_item_dialog.dart';
+import 'manual_add_flow.dart';
 import 'scan_screen.dart';
 
 /// The main Phase 1 screen: the shopping list and the basket.
@@ -78,23 +78,16 @@ class ShoppingListScreen extends StatelessWidget {
           const SizedBox(width: 12),
           FloatingActionButton(
             heroTag: 'add',
-            onPressed: () => _addManually(context),
+            onPressed: () => showManualAddFlow(
+              context: context,
+              basketService: basketService,
+            ),
             tooltip: 'Add item',
             child: const Icon(Icons.add),
           ),
         ],
       ),
     );
-  }
-
-  Future<void> _addManually(BuildContext context) async {
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => const ManualAddItemDialog(),
-    );
-    if (name != null) {
-      await basketService.addManually(name);
-    }
   }
 
   Future<void> _scan(BuildContext context) async {

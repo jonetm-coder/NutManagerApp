@@ -1,7 +1,9 @@
 #!/bin/sh
 # Provisions the nutcache VM for the NutCache dev instance. Run inside the VM as the admin user
 # (deploy.sh does this over SSH). Idempotent: safe to re-run.
-# See docs/design/nutcache-dev-instance.md.
+#
+# Installs Tailscale but doesn't join the tailnet: that's a one-time step needing a tag:nutcache auth key
+# (see "Joining the tailnet" in docs/design/nutcache-dev-instance.md).
 set -eu
 
 FIREBASE_TOOLS_VERSION=15.34.0
@@ -21,8 +23,11 @@ curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public | sudo g
 echo "deb [signed-by=/etc/apt/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb bookworm main" | sudo tee /etc/apt/sources.list.d/adoptium.list >/dev/null
 curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --dearmor --yes -o /etc/apt/keyrings/nodesource.gpg
 echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list >/dev/null
+# Tailscale: the VM joins the owner's tailnet as its own device (tag:nutcache); see the design note.
+curl -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg | sudo tee /etc/apt/keyrings/tailscale.gpg >/dev/null
+echo "deb [signed-by=/etc/apt/keyrings/tailscale.gpg] https://pkgs.tailscale.com/stable/debian bookworm main" | sudo tee /etc/apt/sources.list.d/tailscale.list >/dev/null
 sudo apt-get -q update
-sudo DEBIAN_FRONTEND=noninteractive apt-get -y -q install temurin-21-jre nodejs
+sudo DEBIAN_FRONTEND=noninteractive apt-get -y -q install temurin-21-jre nodejs tailscale
 
 if [ "$(firebase --version 2>/dev/null || true)" != "$FIREBASE_TOOLS_VERSION" ]; then
   sudo npm install -g --no-fund --no-audit "firebase-tools@$FIREBASE_TOOLS_VERSION"

@@ -61,7 +61,7 @@ Rather than installing the backend stand-in directly on Hooper's host OS:
 | libvirt + QEMU/KVM installed, NAT network up | Done 2026-10-18 |
 | `nutcache` VM created; boot guard unit; stop/start cycle tested | Done 2026-10-18 |
 | Emulators (Java, Node, `firebase-tools`) and repo config in `nutcache/` | Done 2026-10-18. Auth, Firestore, Storage and UI running; deny-all rules verified (client read → 403); state survives both a service restart and a full VM shutdown/boot. Functions not configured until the first function exists. |
-| Tailscale in the VM (`tag:nutcache`) and tailnet policy | Not started. Needs the owner to update the tailnet policy and issue a tagged auth key. |
+| Tailscale in the VM (`tag:nutcache`) and tailnet policy | Done 2026-10-18. Joined as `nutcache` (100.103.121.47), tagged, key expiry disabled. Verified: all 7 running emulator ports reachable from the owner's devices, tailnet SSH (22) blocked, and the VM can't reach any other tailnet device. |
 | VM firewall (nftables) | Not started |
 | Scheduled backups to `/mnt/backup/nutcache/` | Not started |
 
@@ -139,22 +139,36 @@ Therefore:
 | Tailscale SSH | Off. Administration goes through Hooper. Can be enabled later if direct SSH from the laptop is wanted. |
 | Outbound | Package installs, the one-time emulator binary download, Tailscale's own control/relay traffic. The `demo-` project ID prevents Functions code from reaching real Google services. |
 
+### Joining the Tailnet
+
+One-time, after `provision-vm.sh` has installed Tailscale. The auth key is generated in the admin console (Settings → Keys): tagged `tag:nutcache`, **not ephemeral** (ephemeral devices are removed whenever they go offline), not reusable, short expiry. The key never enters the repo or the VM's disk: it's saved to a mode-600 file on Hooper, piped to the VM over SSH, and the file is shredded afterwards:
+
+```sh
+tr -d '[:space:]' < ~/nutcache-authkey | ssh nutcache 'sudo tailscale up --auth-key=file:/dev/stdin \
+    --hostname=nutcache --advertise-tags=tag:nutcache --accept-dns=false'
+shred -u ~/nutcache-authkey
+```
+
+`--accept-dns=false` keeps the VM's own DNS unchanged; it never needs to resolve tailnet names. Hooper also has Tailscale DNS off, so `nutcache.tail37f114.ts.net` doesn't resolve *on Hooper* (use `ssh nutcache` or the `100.x` address there). It resolves normally on devices with MagicDNS enabled, which is what the app relies on.
+
+**Emulator UI from other devices:** the Hub advertises every emulator as `127.0.0.1`, but because they *listen* on `0.0.0.0`, the UI's browser code substitutes the hostname the page was loaded from. Opening `http://nutcache.tail37f114.ts.net:4000` therefore makes the UI talk to the emulators at that same name.
+
 ### Defense Layers
 
-1. **Tailnet policy** (outermost): owner's devices may reach `tag:nutcache` only on the eight ports above; `tag:nutcache` may initiate **no** connections to other tailnet devices, so a compromised VM can't reach Hooper's services. Tailscale's default policy (`"src": ["*"]`) would include tagged devices as sources, so it's narrowed. Policy (set in the Tailscale admin console):
+1. **Tailnet policy** (outermost): owner's devices may reach `tag:nutcache` only on the eight ports above; `tag:nutcache` may initiate **no** connections to other tailnet devices, so a compromised VM can't reach Hooper's services. Tailscale's default allow-all grant (`"src": ["*"]`) would include tagged devices as sources, so it's replaced. Policy, in Tailscale's grants syntax (set in the admin console's JSON editor):
 
    ```jsonc
    {
      "tagOwners": {
        "tag:nutcache": ["autogroup:admin"],
      },
-     "acls": [
-       // The owner's own devices can reach each other on all ports (replaces the default allow-all).
-       {"action": "accept", "src": ["autogroup:member"], "dst": ["autogroup:self:*"]},
+     "grants": [
+       // The owner's own devices can reach each other on all ports (replaces the default allow-all grant).
+       {"src": ["autogroup:member"], "dst": ["autogroup:self"], "ip": ["*"]},
        // The owner's devices can reach the NutCache dev emulator ports, and nothing else on nutcache.
-       {"action": "accept", "src": ["autogroup:member"],
-        "dst": ["tag:nutcache:4000,4400,4500,9150,9099,8080,5001,9199"]},
-       // No rule has tag:nutcache as a source, so nutcache cannot initiate connections to anything.
+       {"src": ["autogroup:member"], "dst": ["tag:nutcache"],
+        "ip": ["tcp:4000", "tcp:4400", "tcp:4500", "tcp:9150", "tcp:9099", "tcp:8080", "tcp:5001", "tcp:9199"]},
+       // No grant has tag:nutcache as a source, so nutcache cannot initiate connections to anything.
      ],
    }
    ```

@@ -104,12 +104,14 @@ Entry format:
 
 - **Status:** Open
 - **Source:** [nutcache-dev-instance.md § Storage](design/nutcache-dev-instance.md#storage)
-- **Dev decision:** The NutCache dev VM disk (`/mnt/netstorage/nutcache/`), emulator data exports (`/mnt/backup/nutcache/`), and the VM's Tailscale identity all live on Hooper. They sit on the LUKS-encrypted external drive.
-- **Why it's acceptable in development:** The data is test data only, on an encrypted drive on the owner's hardware.
+- **Dev decision:** The NutCache dev VM disk (`/mnt/netstorage/nutcache/`), emulator data exports (`/mnt/backup/nutcache/`), and the VM's Tailscale identity all live on Hooper. They sit on the LUKS-encrypted external drive. VM administration uses a **passphrase-less** SSH key (`~/.ssh/id_nutcache` on Hooper, needed so the scheduled backup job can log in unattended), and the VM's `tjones` account has **passwordless sudo**.
+- **Why it's acceptable in development:** The data is test data only, on an encrypted drive on the owner's hardware. The VM's SSH port is reachable only from Hooper itself (libvirt NAT network; firewalled off tailnet-side), so the key is only useful to someone who already has a shell on Hooper, and Hooper's own disks are encrypted.
 - **Required before go-live (or when NutCache dev is retired):**
   - Remove the `nutcache` device from the tailnet, and remove `tag:nutcache` from the tailnet policy.
   - Revoke any unused Tailscale auth keys created for it.
   - Delete the VM, its disk image, and its backups once they're no longer needed.
+  - Delete `~/.ssh/id_nutcache` and the `Host nutcache` entry in `~/.ssh/config` on Hooper, plus the `nutcache-vm.service` unit and the NutCache block in `/etc/default/libvirt-guests`.
+  - Nothing about this admin setup carries over to production: production administration goes through Google Cloud IAM (SEC-3), never through SSH keys or sudo on a host we run.
   - Confirm that no dev-only configuration (emulator hosts, the `demo-nutcache` project ID, test accounts) ships in release builds.
 
 ---

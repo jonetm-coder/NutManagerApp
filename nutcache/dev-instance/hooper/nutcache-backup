@@ -1,0 +1,55 @@
+#!/bin/sh
+# Backs up the NutCache dev instance's emulator data to Hooper's backup volume.
+# Installed on Hooper as /usr/local/bin/nutcache-backup; run nightly by nutcache-backup.timer.
+#
+# Asks the running emulators to export (via the Emulator Hub, inside the VM), streams the export to
+# Hooper as one tar.gz, verifies it, then prunes archives older than KEEP_DAYS. Pruning only happens
+# after a successful backup, so if the VM is off for weeks the old backups are kept.
+# See docs/design/nutcache-dev-instance.md ("Backups and restore").
+set -eu
+
+VM=nutcache                      # SSH alias in ~/.ssh/config, and the libvirt domain name
+DEST=/mnt/backup/nutcache
+KEEP_DAYS=14
+STAGING=/var/lib/nutcache/backups   # in the VM, writable by the emulators
+TS=$(date +%Y%m%d-%H%M%S)
+NAME="nutcache-$TS.tar.gz"
+PART="$DEST/.$NAME.part"
+
+cleanup() { rm -f "$PART"; ssh -o BatchMode=yes "$VM" "sudo rm -rf '$STAGING/$TS'" 2>/dev/null || true; }
+trap cleanup EXIT
+
+state=$(virsh -c qemu:///system domstate "$VM" 2>/dev/null || echo unknown)
+if [ "$state" != running ]; then
+  echo "VM $VM is '$state': skipping backup (existing backups left untouched)"
+  exit 0
+fi
+
+# Right after boot (Persistent=true catch-up runs), the VM and emulators may still be starting:
+# wait up to 5 minutes for SSH, then for the Emulator Hub.
+i=0
+until ssh -o BatchMode=yes -o ConnectTimeout=5 "$VM" true 2>/dev/null; do
+  i=$((i + 1)); [ "$i" -ge 30 ] && { echo "VM $VM is running but SSH never came up" >&2; exit 1; }
+  sleep 10
+done
+
+ssh -o BatchMode=yes "$VM" "set -eu
+  systemctl is-active -q nutcache-emulators || { echo 'nutcache-emulators is not running' >&2; exit 1; }
+  i=0
+  ready() { h=\$(curl -fs http://127.0.0.1:4400/emulators) && for e in auth firestore storage; do echo \"\$h\" | grep -q \"\\\"\$e\\\"\" || return 1; done; }
+  until ready; do
+    i=\$((i + 1)); [ \"\$i\" -ge 30 ] && { echo 'emulators not all up (auth, firestore, storage)' >&2; exit 1; }
+    sleep 10
+  done
+  sudo install -d -o nutcache -g nutcache -m 0750 '$STAGING'
+  curl -fsS -X POST -H 'Content-Type: application/json' \
+    -d '{\"path\":\"$STAGING/$TS\",\"initiatedBy\":\"export\"}' http://127.0.0.1:4400/_admin/export >/dev/null
+  sudo test -f '$STAGING/$TS/firebase-export-metadata.json'"
+
+ssh -o BatchMode=yes "$VM" "sudo tar -C '$STAGING' -czf - '$TS'" > "$PART"
+gzip -t "$PART"
+tar -tzf "$PART" | grep -qx "$TS/firebase-export-metadata.json"
+mv "$PART" "$DEST/$NAME"
+echo "backup written: $DEST/$NAME ($(du -h "$DEST/$NAME" | cut -f1))"
+
+find "$DEST" -maxdepth 1 -name 'nutcache-*.tar.gz' -mtime +"$((KEEP_DAYS - 1))" -print -delete | sed 's/^/pruned: /'

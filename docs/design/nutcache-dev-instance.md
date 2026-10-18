@@ -63,7 +63,7 @@ Rather than installing the backend stand-in directly on Hooper's host OS:
 | Emulators (Java, Node, `firebase-tools`) and repo config in `nutcache/` | Done 2026-10-18. Auth, Firestore, Storage and UI running; deny-all rules verified (client read → 403); state survives both a service restart and a full VM shutdown/boot. Functions not configured until the first function exists. |
 | Tailscale in the VM (`tag:nutcache`) and tailnet policy | Done 2026-10-18. Joined as `nutcache` (100.103.121.47), tagged, key expiry disabled. Verified: all 7 running emulator ports reachable from the owner's devices, tailnet SSH (22) blocked, and the VM can't reach any other tailnet device. |
 | VM firewall (nftables) | Done 2026-10-18. Verified: emulator ports reachable over the tailnet only (blocked from Hooper's private network), SSH and ping from Hooper only, Tailscale still connects directly; loads ~2.4 s into boot, before Tailscale and the emulators. |
-| Scheduled backups to `/mnt/backup/nutcache/` | Not started |
+| Scheduled backups to `/mnt/backup/nutcache/` | Done 2026-10-18. Nightly at 03:30, 14-day retention. Verified: backup as the systemd service, wipe, restore and data back; pruning removes only archives past 14 days. |
 
 ## Storage
 
@@ -72,8 +72,20 @@ Hooper boots from a 58 GB SD card. Everything write-heavy for NutCache lives on 
 - **External drive layout:** a 4.5 TB USB drive, LUKS-encrypted, holding an LVM volume group with two volumes: `/mnt/netstorage` (3.5 TB, general data) and `/mnt/backup` (1 TB, backups). There's no unallocated space in the volume group, and none is needed — NutCache uses directories on the existing volumes rather than its own logical volume.
 - **VM disk image:** `/mnt/netstorage/nutcache/nutcache.qcow2`. The downloaded base image is kept alongside in `images/`.
 - **Emulator data:** the emulators hold state in memory and start empty unless told otherwise. They're run with `--import` from, and `--export-on-exit` to, `/var/lib/nutcache/emulator-data` on the VM's disk, so state survives a clean restart. systemd stops them with SIGINT, which triggers the export. That includes the VM's ACPI shutdown when Hooper shuts down (tested).
-- **Backups:** a scheduled job on Hooper triggers an export inside the VM and copies it to `/mnt/backup/nutcache/`, keeping a rolling set of recent snapshots. This also bounds data loss after an unclean shutdown (power loss skips `--export-on-exit`) to the time since the last scheduled export.
+- **Backups:** nightly, to `/mnt/backup/nutcache/`, kept for 14 days. They also bound data loss after an unclean shutdown (power loss skips `--export-on-exit`) to the time since the last backup. See [Backups and Restore](#backups-and-restore) below.
 - **Boot-order safeguard:** the external drive is unlocked at boot from a key file and mounted with `nofail`, so Hooper still boots if the drive is missing or fails to unlock — in which case `/mnt/netstorage` is just an empty directory on the SD card. The VM is therefore **not** started with libvirt's plain autostart; it's started by `/etc/systemd/system/nutcache-vm.service` (on Hooper) with `RequiresMountsFor=/mnt/netstorage/nutcache`, so it only starts when the real drive is mounted and never silently writes a fresh VM onto the SD card. The same unit does a clean ACPI shutdown when Hooper shuts down (waiting up to 5 minutes, so the emulators can export), ordered before the drive is unmounted. `libvirt-guests` is explicitly set to `ON_BOOT=ignore` and `ON_SHUTDOWN=shutdown` in `/etc/default/libvirt-guests`, so it can neither start the VM behind the unit's back nor save its 3 GB of RAM to the SD card.
+
+### Backups and Restore
+
+All on Hooper. Sources are in [`nutcache/dev-instance/hooper/`](../../nutcache/dev-instance/hooper/), installed by hand (`deploy.sh` doesn't manage Hooper-side files).
+
+- **`nutcache-backup.timer`** runs **`nutcache-backup.service`** nightly at 03:30 (plus up to 10 minutes' random delay). It has `Persistent=true`, so a night missed while Hooper was off runs at the next boot. The service runs as `tjones` (who owns the `nutcache` SSH key and is in the `libvirt` group), at low CPU and I/O priority, with `RequiresMountsFor=/mnt/backup/nutcache` so it never writes into an empty mount point on the SD card.
+- **`/usr/local/bin/nutcache-backup`:**
+  - If the VM isn't running (e.g. deliberately stopped for Phase 1 isolation tests), it logs a skip and exits successfully without touching existing backups.
+  - Otherwise it waits up to 5 minutes for SSH and for all three emulators (so post-boot catch-up runs don't fail), then asks the Emulator Hub inside the VM to export (`POST /_admin/export` on `127.0.0.1:4400`, which the VM firewall allows on loopback).
+  - It streams the export to Hooper as one `nutcache-YYYYMMDD-HHMMSS.tar.gz`, verifies the gzip and that it contains the export metadata, and only then deletes archives older than 14 days. Since pruning only follows a successful backup, a long VM outage never prunes away the last good backups.
+- **`/usr/local/bin/nutcache-restore <archive>`:** streams the archive into the VM, stops the emulators (exporting their current state), moves that state aside to `/var/lib/nutcache/emulator-data.pre-restore` (replacing any earlier one), swaps the backup in, and restarts the emulators, which import it.
+- **Checking on it:** `systemctl list-timers nutcache-backup.timer` and `journalctl -u nutcache-backup`.
 
 ## What Runs Inside the VM: Firebase Local Emulator Suite
 
@@ -203,7 +215,7 @@ What mitigates it:
 
 Being upfront about what this setup is *not*:
 
-- **Single point of failure**, no uptime guarantees. Backups are the scheduled exports described under Storage — no replication or offsite copy beyond that.
+- **Single point of failure**, no uptime guarantees. Backups are the nightly exports described under Storage, to a different volume on the *same* external drive: they protect against data mistakes and VM breakage, not against losing the drive or Hooper. No replication or offsite copy (acceptable for test data).
 - **Limited concurrency/performance headroom** — a Pi running a VM running the emulator suite (the Firestore emulator alone runs on a JVM) has a low ceiling. Fine for one developer clicking through the app; not a substitute for any real load or performance testing.
 - **No access control beyond the tailnet.** See "What Tailnet Access Implies." Never exposed via Funnel, port forwarding, or the public internet.
 - **Emulator behavior can subtly diverge from production** — quota/rate-limit behavior, and occasionally newer API surface, may not be perfectly emulated. Don't treat "works against the emulator" as a guarantee it'll behave identically against the real service.

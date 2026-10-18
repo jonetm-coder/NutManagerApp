@@ -1,0 +1,32 @@
+#!/bin/sh
+# Restores the NutCache dev instance's emulator data from a backup made by nutcache-backup.
+# Installed on Hooper as /usr/local/bin/nutcache-restore.
+#
+#   nutcache-restore /mnt/backup/nutcache/nutcache-YYYYMMDD-HHMMSS.tar.gz
+#
+# The emulators are stopped (which exports their current state), that state is kept as
+# emulator-data.pre-restore in the VM (replacing any earlier one), the backup is put in its place, and
+# the emulators are started again, importing it. See docs/design/nutcache-dev-instance.md.
+set -eu
+
+VM=nutcache
+ARCHIVE=${1:?usage: nutcache-restore /mnt/backup/nutcache/nutcache-YYYYMMDD-HHMMSS.tar.gz}
+DATA=/var/lib/nutcache/emulator-data
+STAGING=/var/lib/nutcache/backups
+
+[ -f "$ARCHIVE" ] || { echo "no such file: $ARCHIVE" >&2; exit 1; }
+gzip -t "$ARCHIVE"
+TS=$(tar -tzf "$ARCHIVE" | sed -n 's#^\([0-9-]*\)/firebase-export-metadata.json$#\1#p')
+[ -n "$TS" ] || { echo "$ARCHIVE doesn't look like a nutcache backup" >&2; exit 1; }
+
+echo "restoring $ARCHIVE (export $TS)"
+ssh -o BatchMode=yes "$VM" "sudo install -d -o nutcache -g nutcache -m 0750 '$STAGING' && sudo rm -rf '$STAGING/$TS' && sudo tar -C '$STAGING' -xzf -" < "$ARCHIVE"
+ssh -o BatchMode=yes "$VM" "set -eu
+  sudo systemctl stop nutcache-emulators
+  sudo rm -rf '$DATA.pre-restore'
+  sudo mv '$DATA' '$DATA.pre-restore'
+  sudo mv '$STAGING/$TS' '$DATA'
+  sudo chown -R nutcache:nutcache '$DATA'
+  sudo systemctl start nutcache-emulators"
+echo "restored. Previous state kept in the VM at $DATA.pre-restore."
+echo "The emulators take about 20 s to be ready (longer right after a VM boot)."

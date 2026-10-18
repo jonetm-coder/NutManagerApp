@@ -28,6 +28,8 @@ The dev instance is the Firebase Local Emulator Suite running in the `nutcache` 
 | `dev-instance/nutcache-firewall.nft` | VM, `/etc/nutcache/firewall.nft` | Inbound firewall: emulator ports on the tailnet only, SSH and ping from Hooper only. Its own nftables table; Tailscale's rules are untouched. |
 | `dev-instance/nutcache-firewall.service` | VM, `/etc/systemd/system/` | Loads the firewall early in boot. `deploy.sh` applies changes with an automatic 90-second rollback unless SSH from Hooper still works afterwards. |
 | `dev-instance/hooper/nutcache-vm.service` | Hooper, `/etc/systemd/system/` | Reference copy of the unit that starts the VM only when the external drive is mounted. It's installed by hand; `deploy.sh` doesn't manage it. |
+| `dev-instance/hooper/nutcache-backup` + `.service` + `.timer` | Hooper, `/usr/local/bin/` and `/etc/systemd/system/` | Nightly backup of emulator data to `/mnt/backup/nutcache/`, kept for 14 days. Installed by hand. |
+| `dev-instance/hooper/nutcache-restore` | Hooper, `/usr/local/bin/` | Restores emulator data from one of those backups. |
 
 ### Common tasks
 
@@ -38,6 +40,8 @@ nutcache/dev-instance/deploy.sh             # after changing anything in nutcach
 nutcache/dev-instance/deploy.sh --restart   # restart the emulators (state is exported and re-imported)
 ssh nutcache                                # shell in the VM
 ssh nutcache 'sudo journalctl -u nutcache-emulators -f'   # follow emulator logs
+sudo systemctl start nutcache-backup        # back up now (also runs nightly)
+nutcache-restore /mnt/backup/nutcache/nutcache-YYYYMMDD-HHMMSS.tar.gz
 ```
 
 - **Rules changes** take effect without a restart: the emulators hot-reload rules files. Changes to `firebase.json`, `.firebaserc`, indexes, or the service files trigger a restart automatically.

@@ -1,0 +1,12 @@
+# Installed on Hooper as /etc/systemd/system/nutcache-backup.timer.
+[Unit]
+Description=Nightly NutCache dev backup
+
+[Timer]
+OnCalendar=*-*-* 03:30
+RandomizedDelaySec=10min
+# If Hooper was off at 03:30, run at next boot instead of skipping the night.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,16 @@
+# NutCache dev instance: backs up emulator data to /mnt/backup/nutcache.
+# Installed on Hooper as /etc/systemd/system/nutcache-backup.service; started by nutcache-backup.timer.
+[Unit]
+Description=NutCache dev: back up emulator data
+Documentation=https://github.com/jonetm-coder/NutManagerApp/blob/main/docs/design/nutcache-dev-instance.md
+# Never write backups into an empty mount point on the SD card.
+RequiresMountsFor=/mnt/backup/nutcache
+After=nutcache-vm.service
+
+[Service]
+Type=oneshot
+# Runs as the admin user: it owns the nutcache SSH key and alias, and is in the libvirt group.
+User=tjones
+ExecStart=/usr/local/bin/nutcache-backup
+Nice=10
+IOSchedulingClass=idle

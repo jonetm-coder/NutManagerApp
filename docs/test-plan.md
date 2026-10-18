@@ -61,7 +61,7 @@ Equipment needed across all four phases. Each phase's section below states which
 
 - Equipment: EQ-D1, EQ-N3, EQ-P1, EQ-P2, EQ-P3, EQ-A2, EQ-S2, EQ-S4.
 - NutCache (EQ-N2) is **not** used in this phase — disconnect Tailscale on the test device or shut the `nutcache` VM down, to make sure nothing in Phase 1 accidentally depends on it. Being off the home Wi-Fi is not enough, since Tailscale reaches NutCache from any network.
-- MT1.11, MT1.12, and MT1.13 are the explicit exceptions to the airplane-mode default below: they exercise PLOOKUP-1/PLOOKUP-2/PLOOKUP-3's external open-product-database lookups, which need genuine internet access (not NutCache, which stays disconnected per the point above). Run those with Tailscale still off but Wi-Fi/mobile data on; MT1.13 specifically switches to airplane mode partway through, by design, to confirm the earlier lookup's result is already cached locally.
+- MT1.11, MT1.12, MT1.13, and MT1.14 are the explicit exceptions to the airplane-mode default below: they exercise PLOOKUP-1/PLOOKUP-2/PLOOKUP-3/SCAN-11's external open-product-database lookups, which need genuine internet access (not NutCache, which stays disconnected per the point above). Run those with Tailscale still off but Wi-Fi/mobile data on; MT1.13 and MT1.14 specifically switch to airplane mode partway through (or re-run offline), by design, to confirm behavior at the online/offline boundary.
 - Seed catalog (EQ-A2) populated with entries for every EQ-P1 fixture code plus the EQ-P2 real products, including at least one deliberate near-duplicate pair (e.g., "whole milk" and "2% milk") to exercise ambiguous matching.
 - Barcode fixtures (EQ-P1) generated once via EQ-S4 and committed to `app/test/fixtures/barcodes/`; printed copies made from the same files.
 
@@ -75,6 +75,7 @@ Equipment needed across all four phases. Each phase's section below states which
 | SCAN-4 | Identification works offline | AT1.1, MT1.1 |
 | SCAN-7 | Confirm on low confidence | AT1.4, MT1.4 |
 | SCAN-8 | Manual identify/correct fallback | AT1.4, MT1.2 |
+| SCAN-11 | Bounded live by-barcode lookup as a backup on an in-store catalog miss | AT1.12, MT1.14 |
 | LIST-2 | Match scanned product to list item | AT1.3, MT1.3 |
 | LIST-3 | Confirm ambiguous matches | AT1.3, MT1.4 |
 | LIST-4 | Remove basket item | AT1.5, MT1.5 |
@@ -94,6 +95,7 @@ Equipment needed across all four phases. Each phase's section below states which
 | PLOOKUP-1 | "Check Products": external lookup by name to pre-populate catalog | MT1.11 |
 | PLOOKUP-2 | Scan-to-add from home via local/history/external resolution waterfall | AT1.10, MT1.12 |
 | PLOOKUP-3 | Automatic background barcode lookup/cache when an item is added to a list | AT1.11, MT1.13 |
+| PLOOKUP-4 | Purchase-history-first lookup, checked before every external by-name search | AT1.13, MT1.15 |
 
 ### Automated Test Cases
 
@@ -110,6 +112,8 @@ Equipment needed across all four phases. Each phase's section below states which
 | AT1.9 | Price-tag text parsing (`PriceOcrService.parseText`), pure logic, no camera: a flat total with no unit marker, a per-unit price with a unit marker (e.g. "/lb"), a tag showing both, unit-word normalization, and text with no recognizable price (PRICE-10). | Unit |
 | AT1.10 | Scan-to-add resolution waterfall (`ProductResolutionService`), with a stubbed external-lookup service so no network call occurs: a barcode already in the local catalog resolves there without reaching the external tier; a barcode seen in a past basket entry (any list) resolves via history and is promoted into the catalog; a barcode unknown locally falls through to the (stubbed) external lookup and is promoted into the catalog; a barcode missing from all three tiers resolves to `null` (PLOOKUP-2). | Unit |
 | AT1.11 | `BasketService.addPlannedItem`, with a stubbed external-lookup service: adding a planned item fires a background lookup by that item's name and caches any candidate barcode found into the local catalog, without blocking the add itself; `lookUpAndCacheBarcodes` (the "Check Products" action's underlying method) returns an accurate found-count across multiple items passed to it directly (PLOOKUP-3). | Unit |
+| AT1.12 | `BasketService`'s by-name search breadth and the scan-time live-lookup fallback's caching: `lookUpAndCacheBarcodes` requests a higher-than-default result limit and caches *every* candidate a search returns (not just the first), confirmed against a stub returning several different-brand candidates for one vague item name; `cacheExternalBarcodeMatch` (the method `ScanScreen` calls on a live-lookup hit, SCAN-11) writes a specific barcode→product match that a subsequent `BarcodeLookupService.lookup` of that exact barcode resolves. `ScanScreen`'s own camera-triggered flow is not unit-tested, consistent with this project's existing approach to camera-adjacent screens (verified on-device instead, see MT1.14). | Unit |
+| AT1.13 | `BasketService`'s purchase-history-first lookup (PLOOKUP-4): a past basket entry (on any list, active or archived) whose product name plausibly matches a new item's name/category, via the same `MatchingService` text matching used for scan confirmation, is cached by its exact historical barcode; an unrelated past purchase is not cached as a false match; `addPlannedItem` exercises the same history check as `lookUpAndCacheBarcodes` directly. | Unit |
 
 ### Manual Test Cases
 
@@ -130,12 +134,14 @@ Run on EQ-D1 with NutCache unreachable (per Setup, above) unless stated otherwis
 | MT1.11 | With connectivity available, tap "Check Products" on a list with an item not yet in the local catalog. | App queries the external open product database and candidate products are added to the local catalog for that item. |
 | MT1.12 | With connectivity available, use "Scan to Add" from the Shopping Lists screen (not from inside any specific list) to scan a product barcode not already in the local catalog. | The product is identified (via history or external lookup) or, failing that, the app asks for a name; either way the user is then asked which list to add it to. |
 | MT1.13 | With connectivity available, add a planned item to a list for a real product you have at home (e.g. "Thomas's English Muffins"), wait a few seconds, then disable connectivity (airplane mode) and use the regular in-list "Scan" button (not "Scan to Add") on the real product. | The item resolves correctly from the local catalog with no network call — confirming PLOOKUP-3's background lookup populated the catalog in time, fixing the gap where in-store scanning (local-catalog-only by design) never found a real product that had only ever existed as fake seed data. |
+| MT1.14 | With connectivity available, scan a real product whose exact barcode was never cached locally (e.g. a product not on the list at all, so PLOOKUP-3 never ran for it). Then repeat with connectivity disabled (airplane mode). | **Online:** the live by-barcode fallback (SCAN-11) finds and uses the product within a few seconds, and it's now cached locally (confirm a repeat scan is instant). **Offline:** manual entry (SCAN-8) is offered within a few seconds — not blocked indefinitely waiting on a doomed network call. |
+| MT1.15 | Archive the current list once a real product (e.g. the muffins from MT1.13/MT1.14) has been successfully scanned/added to its basket. Create a brand-new list, add a planned item with a similar but not identical name (e.g. "English Muffins" instead of the exact prior wording), then disable connectivity (airplane mode) and scan the same real product. | The item resolves correctly from the local catalog with no network call — confirming the new list's item was matched against purchase history on the *archived* list and cached by its exact prior barcode (PLOOKUP-4), without needing a fresh external search to re-guess it. |
 
 ### Exit Criteria
 
-- AT1.1–AT1.11 all passing; MT1.1–MT1.13 executed once on EQ-D1 with no failures.
-- Any Should Have requirement not completed (LIST-5, LIST-6, PLOOKUP-1, PLOOKUP-2, PLOOKUP-3) is explicitly logged as carried into Phase 2, not silently dropped.
-- PLOOKUP-1/PLOOKUP-2/PLOOKUP-3 query external product databases directly from the phone — a deliberate interim architecture tracked in [docs/nutcache_migration_debt.md](nutcache_migration_debt.md) (MIGRATE-1), not a gap to fix as part of this phase's exit criteria.
+- AT1.1–AT1.13 all passing; MT1.1–MT1.15 executed once on EQ-D1 with no failures.
+- Any Should Have requirement not completed (LIST-5, LIST-6, PLOOKUP-1, PLOOKUP-2, PLOOKUP-3, PLOOKUP-4, SCAN-11) is explicitly logged as carried into Phase 2, not silently dropped.
+- PLOOKUP-1/PLOOKUP-2/PLOOKUP-3/PLOOKUP-4/SCAN-11 query external product databases directly from the phone — a deliberate interim architecture tracked in [docs/nutcache_migration_debt.md](nutcache_migration_debt.md) (MIGRATE-1), not a gap to fix as part of this phase's exit criteria.
 
 ---
 
@@ -233,13 +239,19 @@ Run on EQ-D1 with NutCache unreachable (per Setup, above) unless stated otherwis
 | COUP-6 | Household-private, synced coupons | MT2.1-style check, re-run for coupons |
 | NUTL-1 | Offline per-member goal-fit indicator | AT3.4, MT3.5 |
 | NUTL-2 | OCR fallback for unknown nutrition | MT3.6 |
-| NUTL-3 | Contribute nutrition corrections | Deferred — see note below |
-| NUTL-4 | Higher corroboration bar for nutrition | Deferred — see note below |
+| NUTL-3 | Contribute nutrition corrections, household-scoped by default | AT3.8, MT3.10 |
+| NUTL-4 | Higher validation bar for nutrition than pricing/barcodes, via ADR 0025 | AT3.7–AT3.11 |
+| NUTL-5 | USDA FoodData Central checked first, trusted automatically | AT3.7 |
+| NUTL-6 | Trust-tier tracking and visible indicator on every nutrition record | AT3.7, MT3.5 |
+| NUTL-7 | Household validation of unverified nutrition data | AT3.8, MT3.10 |
+| NUTL-8 | Maintainer verification promoting data to global trust | AT3.9 |
+| NUTL-9 | Trust tied to a value snapshot, not the product record generally | AT3.10 |
+| NUTL-10 | 12-month re-validation expiry for human-granted trust | AT3.11 |
 | PLAN-1 | Per-member nutrient targets | AT3.4 |
 | PLAN-4 | Nutrition goals as household-private data | Covered by Phase 2's CLOUD-2 rules suite, extended to the goals collection |
 | NPROC-2 | Local snapshot of active goals for offline matching | AT3.6, MT3.7 |
 
-*Note on PRICE-9/NUTL-3/NUTL-4:* these describe crowdsourced-data quality mechanisms (outlier detection, corroboration thresholds) that need a realistic volume of shared data to meaningfully test, similar to BC-3 in Phase 2. Verify the submission pathway works; log full validation-logic testing as carried forward until there's enough real data to exercise it meaningfully.
+*Note on PRICE-9:* this describes a crowdsourced-data quality mechanism (statistical outlier detection) that needs a realistic volume of shared data to meaningfully test, similar to BC-3 in Phase 2. Verify the submission pathway works; log full validation-logic testing as carried forward until there's enough real data to exercise it meaningfully. NUTL-3/NUTL-4's validation bar no longer has this problem — ADR 0025 replaced volume-dependent corroboration with explicit, individually-testable household-validation and maintainer-verification actions (AT3.7–AT3.11), so these are not deferred.
 
 ### Automated Test Cases
 
@@ -251,6 +263,11 @@ Run on EQ-D1 with NutCache unreachable (per Setup, above) unless stated otherwis
 | AT3.4 | Goal-matching evaluator (NUTL-1): given a nutrient target (PLAN-1) and a product's nutrition data, verify pass/fail/boundary cases for min-only, max-only, and range target types. | Unit |
 | AT3.5 | Against NutCache dev: a price observation submitted with opt-out enabled (PRICE-8) never carries identifying contributor info in the shared collection (PRICE-7); one submitted without opt-out carries only the opaque contributor token, never personal identity. | Integration (emulator) |
 | AT3.6 | NPROC-2's local goal snapshot updates correctly after an online goal edit, and remains correct/usable after connectivity is subsequently disabled. | Integration (on-device) |
+| AT3.7 | ADR 0025's lookup order and trust tiers (NUTL-5, NUTL-6): given a product present in USDA FoodData Central *and* a conflicting household-validated or maintainer-verified entry for the same product, the USDA value is used; a product with no USDA entry falls back to maintainer-verified, then household-validated-for-this-household, then unverified, each surfaced with its actual trust tier (never silently upgraded). | Integration (emulator) |
+| AT3.8 | Household validation (NUTL-3, NUTL-7): a household member confirming an unverified entry records the household, member, timestamp, and the exact value snapshot validated; the resulting trust is visible to that household but the same entry still shows as unverified to a second, unrelated household. | Integration (emulator) |
+| AT3.9 | Maintainer verification (NUTL-8): a maintainer-only Cloud Function/admin action promotes an entry to global trust, visible identically to every household afterward, including one that never validated it itself. | Integration (emulator) |
+| AT3.10 | Snapshot-scoped trust (NUTL-9): editing or re-capturing the values of a previously maintainer-verified or household-validated entry resets its trust tier to unverified; the prior trust status does not carry over to the new values. | Unit |
+| AT3.11 | Re-validation expiry (NUTL-10): a household-validated or maintainer-verified entry whose `validatedAt` is more than 12 months in the past evaluates as unverified; one within the window still evaluates as trusted; USDA-sourced entries are exempt from this expiry check entirely. | Unit |
 
 ### Manual Test Cases
 
@@ -265,12 +282,13 @@ Run on EQ-D1 with NutCache unreachable (per Setup, above) unless stated otherwis
 | MT3.7 | With connectivity off throughout, re-check the goal-fit indicator from MT3.5 without having made any new edits. | Indicator still reflects the previously-set goal correctly (NPROC-2). |
 | MT3.8 | (Requires at least two distinct "store" entries in test price data.) Open the price comparison view for a product with observations at both stores. | Both stores' prices shown; adjusting the configurable radius/store set (PRICE-5) changes what's included. |
 | MT3.9 | Disable connectivity, then open the price comparison view again. | Last-synced data shown with a visible timestamp, not a blank/broken state. |
+| MT3.10 | Scan a product whose nutrition data is unverified (no USDA entry, not yet validated by anyone), tap through to validate it by comparing against a fresh OCR capture of the real panel, then confirm. Re-open the goal-fit result for that product. | The entry now shows as household-validated and trusted for this household; a second test account/household (not performing the validation) still sees it as unverified for the same entry (NUTL-7). |
 
 ### Exit Criteria
 
-- AT3.1–AT3.6 and MT3.3–MT3.9 all passing.
+- AT3.1–AT3.11 and MT3.3–MT3.10 all passing.
 - COUP-5 and NUTL-1's pass/fail thresholds reviewed by a person against real products (not just unit-tested), since these are the first features whose *correctness*, not just functionality, directly affects user trust.
-- PRICE-9/NUTL-3/NUTL-4 logged as carried forward per the note above.
+- PRICE-9 logged as carried forward per the note above.
 
 ---
 

@@ -125,6 +125,35 @@ void main() {
     );
 
     test(
+      'the history tier matches a historical basket entry recorded with '
+      'the other UPC-A/EAN-13 digit-length form of the scanned barcode',
+      () async {
+        final seededList = await database.select(database.shoppingLists).getSingle();
+        await database
+            .into(database.basketEntries)
+            .insert(
+              BasketEntriesCompanion.insert(
+                listId: seededList.id,
+                productName: 'Zero-Padded History',
+                barcode: const Value('0999000000004'),
+              ),
+            );
+        final fakeLookup = _FakeProductLookupService(null);
+        final resolver = ProductResolutionService(
+          database,
+          BarcodeLookupService(database),
+          fakeLookup,
+        );
+
+        final result = await resolver.resolve('999000000004');
+
+        expect(result?.name, 'Zero-Padded History');
+        expect(result?.source, ResolutionSource.history);
+        expect(fakeLookup.wasCalled, isFalse);
+      },
+    );
+
+    test(
       'a barcode that misses all three tiers resolves to null (falls '
       'through to manual entry, same as SCAN-8)',
       () async {

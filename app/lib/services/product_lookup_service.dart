@@ -54,8 +54,15 @@ class ProductLookupService {
 
   final http.Client _client;
 
+  // The legacy `world.openfoodfacts.org/cgi/search.pl` CGI endpoint this
+  // used to call now returns HTTP 503 for every request (confirmed via a
+  // direct call, not an assumption) — Open Food Facts migrated full-text
+  // search to this Elasticsearch-backed API. Every by-name search was
+  // silently finding nothing as a result (searchByName's error handling
+  // swallows the failure, by design, so there was no crash — just a quiet,
+  // total miss for every product).
   static final Uri _openFoodFactsSearchUri = Uri.parse(
-    'https://world.openfoodfacts.org/cgi/search.pl',
+    'https://search.openfoodfacts.org/search',
   );
 
   static Uri _openFoodFactsProductUri(String barcode) => Uri.parse(
@@ -80,11 +87,9 @@ class ProductLookupService {
     try {
       final uri = _openFoodFactsSearchUri.replace(
         queryParameters: {
-          'search_terms': name,
-          'search_simple': '1',
-          'action': 'process',
-          'json': '1',
+          'q': name,
           'page_size': '$limit',
+          'fields': 'code,product_name,brands',
         },
       );
       final response = await _client
@@ -94,8 +99,8 @@ class ProductLookupService {
         return const [];
       }
       final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-      final products = decoded['products'] as List<dynamic>? ?? const [];
-      return products
+      final hits = decoded['hits'] as List<dynamic>? ?? const [];
+      return hits
           .map(_candidateFromOpenFoodFactsJson)
           .whereType<ExternalProductCandidate>()
           .toList();
@@ -171,6 +176,11 @@ class ProductLookupService {
     }
   }
 
+  // Shared by the by-name search (search.openfoodfacts.org, where `brands`
+  // is a JSON array) and the by-barcode product lookup
+  // (world.openfoodfacts.org/api/v2, where `brands` is a single
+  // comma-separated string) — two different Open Food Facts APIs with two
+  // different shapes for the same logical field, so both are handled here.
   ExternalProductCandidate? _candidateFromOpenFoodFactsJson(dynamic json) {
     if (json is! Map<String, dynamic>) {
       return null;
@@ -180,14 +190,21 @@ class ProductLookupService {
     if (barcode == null || barcode.isEmpty || name == null || name.isEmpty) {
       return null;
     }
-    final brands = json['brands'] as String?;
     return ExternalProductCandidate(
       barcode: barcode,
       name: name,
-      brand: (brands == null || brands.isEmpty)
-          ? null
-          : brands.split(',').first.trim(),
+      brand: _firstBrand(json['brands']),
     );
+  }
+
+  String? _firstBrand(dynamic brands) {
+    if (brands is List) {
+      return brands.isEmpty ? null : brands.first.toString().trim();
+    }
+    if (brands is String && brands.isNotEmpty) {
+      return brands.split(',').first.trim();
+    }
+    return null;
   }
 
   static const Map<String, String> _requestHeaders = {

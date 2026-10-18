@@ -11,14 +11,24 @@ import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart
 /// ([captureAndDecode], using [CameraController.takePicture] +
 /// [decodeImageFile]) rather than processing the live raw camera frame
 /// stream. Raw-frame decoding needs correct platform-specific pixel-format
-/// conversion (YUV_420 on Android, BGRA on iOS) — a common source of
-/// subtle bugs that, from a dev environment with no attached device, can't
-/// be verified before shipping. Capture-then-decode is slightly slower per
-/// attempt but reuses the exact same [decodeImageFile] path the on-device
-/// fixture test (AT1.2) already validates, and still fully satisfies
-/// SCAN-1/PLAT-3 (offline, camera-based scanning). A live-stream version
-/// is a reasonable future enhancement once this can be tested on real
-/// hardware.
+/// conversion (YUV_420 on Android, BGRA on iOS) and the ML Kit plugin
+/// version this project is pinned to (`google_mlkit_commons` 0.9.0) has no
+/// `InputImage.fromCameraImage` convenience constructor for it — it would
+/// need to be hand-built from `CameraImage.planes`/rotation/format, a
+/// common source of subtle, silent bugs (wrong rotation yields zero
+/// detections, not an error) that's riskier to get right than this
+/// project's test setup can fully verify. Capture-then-decode is slightly
+/// slower per attempt but reuses the exact same [decodeImageFile] path the
+/// on-device fixture test (AT1.2) already validates, and still fully
+/// satisfies SCAN-1/PLAT-3 (offline, camera-based scanning).
+///
+/// What *is* automatic: [ScanScreen] (not this class) now calls
+/// [captureAndDecode] in a retry loop with no button press needed,
+/// stopping as soon as one attempt succeeds — this gets the no-button-
+/// required UX a true live stream would give, at the cost of each attempt
+/// having a still-capture's shutter/encode latency rather than being
+/// instant. A true raw-frame live-stream version remains a reasonable
+/// future enhancement if that latency ever proves to matter in practice.
 ///
 /// UREQS: SCAN-1, SCAN-4, PLAT-3
 class ScannerService {

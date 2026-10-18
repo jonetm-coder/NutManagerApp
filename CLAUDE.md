@@ -93,3 +93,4 @@ All architectural decisions below have been accepted — see [docs/adrs/Accepted
   - [0022: Cross-User Data Sharing — Scope & Governance Model](docs/adrs/Accepted/0022-cross-user-data-sharing-scope-model.md)
   - [0023: Recipe Sharing & Discovery](docs/adrs/Accepted/0023-recipe-sharing-and-discovery.md)
   - [0024: Recipe Copyright & Contributor Liability](docs/adrs/Accepted/0024-recipe-copyright-and-contributor-liability.md)
+  - [0025: Nutrition Data Trust & Validation Model](docs/adrs/Accepted/0025-nutrition-data-trust-and-validation-model.md)

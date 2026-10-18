@@ -155,6 +155,7 @@ class _ScanToAddScreenState extends State<ScanToAddScreen> {
             builder: (context) => MatchConfirmationDialog(
               productName: name,
               candidates: matchResult.candidates,
+              allPendingItems: basketService.pendingItems,
             ),
           );
         case MatchOutcome.none:
@@ -169,6 +170,14 @@ class _ScanToAddScreenState extends State<ScanToAddScreen> {
         ),
         matchedItem: matchedItem,
         quantity: quantity,
+      );
+      // Same history-first/broader-search treatment as a planned item or
+      // an in-store scan (PLOOKUP-3): broaden the local catalog around
+      // this now-confirmed product name/category in the background.
+      // Safe to outlive the dispose() below — this never calls
+      // notifyListeners(), only writes to the database.
+      unawaited(
+        basketService.lookUpAndCacheBarcodes([(name: name, category: category)]),
       );
       basketService.dispose();
 

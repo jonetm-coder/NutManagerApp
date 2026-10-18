@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../data/database.dart';
 import '../services/matching_service.dart';
 
 /// Shown when a matched product needs user confirmation before being added
@@ -11,15 +12,23 @@ import '../services/matching_service.dart';
 /// hit/miss, so there isn't yet a genuine SCAN-7 case distinct from LIST-3.
 /// See docs/development-plan.md's Phase 1 section.
 ///
+/// Leads with a single suggestion — [candidates]' best-scoring match — for
+/// a one-tap confirmation, since most products match by name clearly
+/// enough that showing every candidate up front is unnecessary friction.
+/// "Other" reveals the full pending-item list ([allPendingItems], not just
+/// the scored candidates) only if the suggestion is wrong.
+///
 /// UREQS: LIST-3, SCAN-7
-class MatchConfirmationDialog extends StatelessWidget {
-  /// Creates the dialog for [productName]'s ambiguous [candidates].
+class MatchConfirmationDialog extends StatefulWidget {
+  /// Creates the dialog for [productName]'s ambiguous [candidates], with
+  /// [allPendingItems] as the fallback full list behind "Other".
   ///
   /// UREQS: LIST-3
   const MatchConfirmationDialog({
     super.key,
     required this.productName,
     required this.candidates,
+    required this.allPendingItems,
   });
 
   /// The identified product's name, shown as context in the dialog title.
@@ -27,32 +36,65 @@ class MatchConfirmationDialog extends StatelessWidget {
   /// UREQS: LIST-3
   final String productName;
 
-  /// Candidate shopping list items to choose from, best match first.
+  /// Candidate shopping list items, best match first. The first entry is
+  /// shown as the one-tap suggestion.
   ///
   /// UREQS: LIST-3
   final List<MatchCandidate> candidates;
 
+  /// Every pending item on the list, shown behind "Other" when the
+  /// suggested candidate isn't the right one.
+  ///
+  /// UREQS: LIST-3
+  final List<ShoppingListItem> allPendingItems;
+
+  @override
+  State<MatchConfirmationDialog> createState() =>
+      _MatchConfirmationDialogState();
+}
+
+class _MatchConfirmationDialogState extends State<MatchConfirmationDialog> {
+  bool _showingFullList = false;
+
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('Which item is "$productName"?'),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            for (final candidate in candidates)
-              ListTile(
-                title: Text(candidate.listItem.name),
-                onTap: () => Navigator.of(context).pop(candidate.listItem),
-              ),
-          ],
+    if (_showingFullList) {
+      return AlertDialog(
+        title: Text('Which item is "${widget.productName}"?'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final item in widget.allPendingItems)
+                ListTile(
+                  title: Text(item.name),
+                  onTap: () => Navigator.of(context).pop(item),
+                ),
+            ],
+          ),
         ),
-      ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('None of these'),
+          ),
+        ],
+      );
+    }
+
+    final suggestion = widget.candidates.first.listItem;
+    return AlertDialog(
+      title: Text('Add "${widget.productName}"'),
+      content: Text('This looks like "${suggestion.name}" on your list.'),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('None of these'),
+          onPressed: () => setState(() => _showingFullList = true),
+          child: const Text('Other'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(suggestion),
+          child: const Text("Yes, that's it"),
         ),
       ],
     );

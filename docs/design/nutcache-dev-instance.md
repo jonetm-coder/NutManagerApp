@@ -62,7 +62,7 @@ Rather than installing the backend stand-in directly on Hooper's host OS:
 | `nutcache` VM created; boot guard unit; stop/start cycle tested | Done 2026-10-18 |
 | Emulators (Java, Node, `firebase-tools`) and repo config in `nutcache/` | Done 2026-10-18. Auth, Firestore, Storage and UI running; deny-all rules verified (client read → 403); state survives both a service restart and a full VM shutdown/boot. Functions not configured until the first function exists. |
 | Tailscale in the VM (`tag:nutcache`) and tailnet policy | Done 2026-10-18. Joined as `nutcache` (100.103.121.47), tagged, key expiry disabled. Verified: all 7 running emulator ports reachable from the owner's devices, tailnet SSH (22) blocked, and the VM can't reach any other tailnet device. |
-| VM firewall (nftables) | Not started |
+| VM firewall (nftables) | Done 2026-10-18. Verified: emulator ports reachable over the tailnet only (blocked from Hooper's private network), SSH and ping from Hooper only, Tailscale still connects directly; loads ~2.4 s into boot, before Tailscale and the emulators. |
 | Scheduled backups to `/mnt/backup/nutcache/` | Not started |
 
 ## Storage
@@ -175,7 +175,7 @@ shred -u ~/nutcache-authkey
 
    Any existing `ssh` or other sections of the policy are kept as they are.
 
-2. **VM firewall (nftables):** emulator ports accepted on `tailscale0` only; SSH accepted on the libvirt interface only; everything else inbound dropped.
+2. **VM firewall (nftables):** emulator ports accepted on `tailscale0` only; SSH and ping accepted only from Hooper (`192.168.122.1`) on the libvirt interface; Tailscale's WireGuard port (UDP 41641) and DHCP renewals accepted on that interface; everything else inbound dropped. The rules ([`nutcache/dev-instance/nutcache-firewall.nft`](../../nutcache/dev-instance/nutcache-firewall.nft)) live in their own table, `inet nutcache`, loaded early in boot by `nutcache-firewall.service`, and leave Tailscale's own netfilter tables alone. Debian's stock `nftables.service` is deliberately not used: it runs `nft flush ruleset` on stop, which would also wipe Tailscale's rules. `deploy.sh` applies firewall changes with a dead man's switch: a timer in the VM removes the table after 90 s unless a fresh SSH login from Hooper succeeds.
 3. **Emulator binding:** the emulators listen only on the VM's own interfaces; nothing is reachable via any Hooper address.
 
 ### Why Plain HTTP Rather Than HTTPS

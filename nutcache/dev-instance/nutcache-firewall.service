@@ -1,0 +1,18 @@
+# NutCache dev instance: loads the VM's inbound firewall table.
+# Installed in the nutcache VM as /etc/systemd/system/nutcache-firewall.service.
+# Deliberately not Debian's nftables.service: that one runs "nft flush ruleset" on stop, which would
+# also wipe Tailscale's rules.
+[Unit]
+Description=NutCache dev: VM inbound firewall (nftables table inet nutcache)
+DefaultDependencies=no
+Before=network-pre.target nutcache-emulators.service tailscaled.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/nutcache/firewall.nft
+ExecStop=/usr/sbin/nft delete table inet nutcache
+
+[Install]
+WantedBy=sysinit.target

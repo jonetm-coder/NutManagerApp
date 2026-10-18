@@ -10,7 +10,7 @@ FIREBASE_TOOLS_VERSION=15.34.0
 NODE_MAJOR=22
 
 sudo apt-get -q update
-sudo DEBIAN_FRONTEND=noninteractive apt-get -y -q install ca-certificates curl gnupg rsync locales qemu-guest-agent
+sudo DEBIAN_FRONTEND=noninteractive apt-get -y -q install ca-certificates curl gnupg rsync locales qemu-guest-agent nftables
 
 # en_US.UTF-8, so SSH sessions from Hooper don't warn about a missing locale.
 echo "en_US.UTF-8 UTF-8" | sudo tee /etc/locale.gen >/dev/null

@@ -21,10 +21,12 @@ The dev instance is the Firebase Local Emulator Suite running in the `nutcache` 
 
 | File | Runs on | Purpose |
 |---|---|---|
-| `dev-instance/deploy.sh` | Hooper | Syncs this directory's config to the VM, installs the service files, and restarts the emulators only when needed. `--provision` re-runs VM provisioning first; `--restart` forces a restart. |
+| `dev-instance/deploy.sh` | Hooper | Syncs this directory's config to the VM, installs the service files, and restarts the emulators only when needed. `--provision` re-runs VM provisioning first; `--restart` forces a restart. Firewall changes are applied with an automatic rollback guard. |
 | `dev-instance/provision-vm.sh` | VM (via `deploy.sh --provision`) | Idempotent VM setup: Java 21 (Temurin), Node.js 22 (NodeSource), a pinned `firebase-tools` version, the `nutcache` service account, and directories. |
 | `dev-instance/nutcache-emulators` | VM, `/usr/local/bin/` | Starts the emulators: imports saved state if there is any, and exports on a clean stop. |
 | `dev-instance/nutcache-emulators.service` | VM, `/etc/systemd/system/` | systemd unit for the above, running as the `nutcache` user. |
+| `dev-instance/nutcache-firewall.nft` | VM, `/etc/nutcache/firewall.nft` | Inbound firewall: emulator ports on the tailnet only, SSH and ping from Hooper only. Its own nftables table; Tailscale's rules are untouched. |
+| `dev-instance/nutcache-firewall.service` | VM, `/etc/systemd/system/` | Loads the firewall early in boot. `deploy.sh` applies changes with an automatic 90-second rollback unless SSH from Hooper still works afterwards. |
 | `dev-instance/hooper/nutcache-vm.service` | Hooper, `/etc/systemd/system/` | Reference copy of the unit that starts the VM only when the external drive is mounted. It's installed by hand; `deploy.sh` doesn't manage it. |
 
 ### Common tasks

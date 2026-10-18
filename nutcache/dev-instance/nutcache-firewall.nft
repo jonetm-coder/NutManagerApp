@@ -1,0 +1,45 @@
+#!/usr/sbin/nft -f
+# NutCache dev instance: inbound firewall for the nutcache VM.
+# Installed as /etc/nutcache/firewall.nft; loaded by nutcache-firewall.service.
+# See "Defense Layers" in docs/design/nutcache-dev-instance.md.
+#
+# This only manages its own table. Tailscale keeps its own netfilter rules in separate tables. A packet
+# must be accepted by every base chain on the input hook, so a drop here is final, and an accept here
+# still has to pass Tailscale's checks.
+
+# Create-then-delete, so re-loading this file replaces the table atomically.
+table inet nutcache
+delete table inet nutcache
+
+table inet nutcache {
+  # Emulator ports reachable over the tailnet (Functions' 5001 is reserved for when it's enabled).
+  set emulator_ports {
+    type inet_service
+    elements = { 4000, 4400, 4500, 9150, 9099, 8080, 9199, 5001 }
+  }
+
+  chain input {
+    type filter hook input priority filter; policy drop;
+
+    iif "lo" accept
+    ct state invalid drop
+    ct state established,related accept
+
+    # Emulators: tailnet only.
+    iifname "tailscale0" tcp dport @emulator_ports accept
+
+    # Admin SSH: only from Hooper itself (its address on the libvirt NAT network).
+    iifname "enp1s0" ip saddr 192.168.122.1 tcp dport 22 accept
+
+    # Tailscale's WireGuard traffic, so peers can connect directly instead of via a relay.
+    iifname "enp1s0" udp dport 41641 accept
+
+    # DHCP lease renewals from libvirt's dnsmasq.
+    iifname "enp1s0" udp sport 67 udp dport 68 accept
+
+    # Ping from Hooper (diagnostics), and ICMP errors/IPv6 neighbor discovery needed for networking to work.
+    iifname "enp1s0" ip saddr 192.168.122.1 icmp type echo-request accept
+    icmp type { destination-unreachable, time-exceeded, parameter-problem } accept
+    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, nd-neighbor-solicit, nd-neighbor-advert, nd-router-advert } accept
+  }
+}

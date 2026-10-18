@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 
 import '../data/database.dart';
+import 'matching_service.dart';
 import 'product_lookup_service.dart';
 
 /// Holds one shopping list's items and basket, backed by [AppDatabase]
@@ -32,6 +33,7 @@ class BasketService extends ChangeNotifier {
 
   final AppDatabase _database;
   final ProductLookupService _productLookup;
+  final _matcher = MatchingService();
 
   /// The shopping list this service's items/basket belong to.
   ///
@@ -92,14 +94,27 @@ class BasketService extends ChangeNotifier {
     unawaited(lookUpAndCacheBarcodes([(name: name, category: category)]));
   }
 
-  /// Searches external open product databases for each of [items] by name
-  /// and caches any candidate barcodes found into the local shared catalog
-  /// (PLOOKUP-1), so a later in-store scan of the real product resolves
-  /// from the local catalog alone. Network/parse failures are swallowed
-  /// per-item by [ProductLookupService] itself; this never throws and
-  /// never blocks on a missing connection. Returns how many candidates
-  /// were found across all items, for a caller that wants to report a
-  /// count (e.g. the manual "Check Products" action).
+  /// How many by-name search results to cache per item. Deliberately
+  /// generous and brand-agnostic: a vague item name (e.g. "English
+  /// Muffins") covers many real-world SKUs/brands/sizes, and there's no
+  /// way to know ahead of time which one the user actually owns — so
+  /// every candidate returned gets cached (see [lookUpAndCacheBarcodes]),
+  /// not just the first/top-ranked one, to maximize the chance that
+  /// whichever exact product the user later scans is already known
+  /// locally.
+  static const int _searchCacheLimit = 25;
+
+  /// For each of [items], first caches any of this household's *own past
+  /// purchases* that plausibly match (see [_cacheHistoricalMatches]) —
+  /// free, instant, and exact when it hits, since it's a product they
+  /// already bought before, not a guess — then searches external open
+  /// product databases by name and caches any candidates found
+  /// (PLOOKUP-1), in case this trip buys a different brand/variant than
+  /// last time. Network/parse failures are swallowed per-item by
+  /// [ProductLookupService] itself; this never throws and never blocks on
+  /// a missing connection. Returns how many candidates were cached across
+  /// all items (history + external combined), for a caller that wants to
+  /// report a count (e.g. the manual "Check Products" action).
   ///
   /// UREQS: PLOOKUP-1, PLOOKUP-3
   Future<int> lookUpAndCacheBarcodes(
@@ -107,7 +122,12 @@ class BasketService extends ChangeNotifier {
   ) async {
     var foundCount = 0;
     for (final item in items) {
-      final candidates = await _productLookup.searchByName(item.name);
+      foundCount += await _cacheHistoricalMatches(item.name, item.category);
+
+      final candidates = await _productLookup.searchByName(
+        item.name,
+        limit: _searchCacheLimit,
+      );
       for (final candidate in candidates) {
         await _database
             .into(_database.catalogEntries)
@@ -122,6 +142,84 @@ class BasketService extends ChangeNotifier {
       }
     }
     return foundCount;
+  }
+
+  /// Looks across this household's *entire* purchase history — every
+  /// basket entry with a recorded barcode, on any list, active or
+  /// archived — for products that plausibly match [name]/[category] (via
+  /// the same [MatchingService] text matching used for scan confirmation,
+  /// so "Thomas's English Mufins" correctly finds a past entry recorded
+  /// as "Original English Muffins"), and caches each match's exact
+  /// barcode into the local catalog. A confirmed past purchase is a far
+  /// more reliable signal than a fresh by-name guess, which is why this
+  /// runs before the external search in [lookUpAndCacheBarcodes] — a
+  /// person is likely to buy the same product again, and when they do,
+  /// their phone should already know its exact barcode with zero network
+  /// calls.
+  ///
+  /// UREQS: PLOOKUP-1, PLOOKUP-3
+  Future<int> _cacheHistoricalMatches(String name, String category) async {
+    final target = ShoppingListItem(
+      id: 0,
+      listId: 0,
+      name: name,
+      category: category,
+      quantity: 1,
+      status: ListItemStatus.pending,
+    );
+    final history = await _database.select(_database.basketEntries).get();
+
+    var foundCount = 0;
+    final seenBarcodes = <String>{};
+    for (final entry in history) {
+      final barcode = entry.barcode;
+      if (barcode == null || !seenBarcodes.add(barcode)) {
+        continue;
+      }
+      final result = _matcher.match(
+        productName: entry.productName,
+        pendingItems: [target],
+      );
+      if (result.outcome == MatchOutcome.none) {
+        continue;
+      }
+      await _database
+          .into(_database.catalogEntries)
+          .insertOnConflictUpdate(
+            CatalogEntriesCompanion.insert(
+              barcode: barcode,
+              name: entry.productName,
+              category: category,
+            ),
+          );
+      foundCount++;
+    }
+    return foundCount;
+  }
+
+  /// Caches a specific external lookup result for [barcode] into the
+  /// local catalog — used when an in-store scan misses the local catalog
+  /// but a bounded, best-effort live by-barcode lookup (SCAN-11) finds
+  /// it. Unlike [lookUpAndCacheBarcodes]'s by-name search, which can only
+  /// guess at the right SKU among many similarly-named products, this
+  /// targets the exact barcode that was actually scanned, so it's always
+  /// precise when it succeeds at all.
+  ///
+  /// UREQS: SCAN-11
+  Future<void> cacheExternalBarcodeMatch(
+    String barcode, {
+    required String name,
+    String category = 'other',
+  }) {
+    return _database
+        .into(_database.catalogEntries)
+        .insertOnConflictUpdate(
+          CatalogEntriesCompanion.insert(
+            barcode: barcode,
+            name: name,
+            category: category,
+          ),
+        );
   }
 
   /// Adds [product] to the basket. If [matchedItem] is given, that list

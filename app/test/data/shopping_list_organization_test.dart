@@ -25,6 +25,7 @@ class _StubProductLookupService extends ProductLookupService {
 
   final ExternalProductCandidate _candidate;
   final List<String> searchedNames = [];
+  final List<int> receivedLimits = [];
 
   @override
   Future<List<ExternalProductCandidate>> searchByName(
@@ -32,8 +33,24 @@ class _StubProductLookupService extends ProductLookupService {
     int limit = 10,
   }) async {
     searchedNames.add(name);
+    receivedLimits.add(limit);
     return [_candidate];
   }
+}
+
+/// Returns several candidates spanning different brands for any search —
+/// used to verify brand-agnostic breadth: every candidate returned gets
+/// cached, not just one "best" guess.
+class _MultiCandidateProductLookupService extends ProductLookupService {
+  _MultiCandidateProductLookupService(this._candidates);
+
+  final List<ExternalProductCandidate> _candidates;
+
+  @override
+  Future<List<ExternalProductCandidate>> searchByName(
+    String name, {
+    int limit = 10,
+  }) async => _candidates;
 }
 
 Future<List<ShoppingList>> _activeLists(AppDatabase database) {
@@ -219,6 +236,204 @@ void main() {
 
         expect(foundCount, 2);
         expect(stubLookup.searchedNames, ['Milk', 'Eggs']);
+      },
+    );
+
+    test(
+      'searches with a higher-than-default limit, so a vague item name '
+      'like "English Muffins" has a better chance of surfacing the '
+      'specific SKU the user actually owns among many similarly-named '
+      'products',
+      () async {
+        final seededList = await database.select(database.shoppingLists).getSingle();
+        final stubLookup = _StubProductLookupService(
+          const ExternalProductCandidate(barcode: '000000000001', name: 'Milk'),
+        );
+        final service = BasketService(
+          database,
+          seededList.id,
+          productLookup: stubLookup,
+        );
+        await _flushMicrotasks();
+
+        await service.lookUpAndCacheBarcodes([(name: 'Milk', category: 'dairy')]);
+
+        expect(stubLookup.receivedLimits.single, greaterThan(10));
+      },
+    );
+
+    test(
+      'caches every candidate a search returns, regardless of brand — not '
+      'just the first/top-ranked one, since there is no way to know ahead '
+      'of time which brand/SKU the user actually has on their list',
+      () async {
+        final seededList = await database.select(database.shoppingLists).getSingle();
+        final multiLookup = _MultiCandidateProductLookupService(const [
+          ExternalProductCandidate(barcode: '0048121102081', name: 'Thomas Original'),
+          ExternalProductCandidate(barcode: '0048121184711', name: 'Thomas Hearty'),
+          ExternalProductCandidate(
+            barcode: '0099482474843',
+            name: 'Whole Foods Whole Wheat Muffins',
+          ),
+        ]);
+        final service = BasketService(
+          database,
+          seededList.id,
+          productLookup: multiLookup,
+        );
+        await _flushMicrotasks();
+
+        final foundCount = await service.lookUpAndCacheBarcodes([
+          (name: 'English Muffins', category: 'bakery'),
+        ]);
+
+        expect(foundCount, 3);
+        final cachedBarcodes = (await database.select(database.catalogEntries).get())
+            .map((e) => e.barcode)
+            .toSet();
+        expect(
+          cachedBarcodes,
+          containsAll(['0048121102081', '0048121184711', '0099482474843']),
+        );
+      },
+    );
+
+    test(
+      'cacheExternalBarcodeMatch (the scan-time live-lookup fallback, '
+      'SCAN-11) writes a specific barcode->product match into the local '
+      'catalog',
+      () async {
+        final seededList = await database.select(database.shoppingLists).getSingle();
+        final service = BasketService(
+          database,
+          seededList.id,
+          productLookup: _FakeProductLookupService(),
+        );
+        await _flushMicrotasks();
+
+        await service.cacheExternalBarcodeMatch(
+          '048121184117',
+          name: 'Original English Muffins',
+          category: 'bakery',
+        );
+
+        final cached = await (database.select(
+          database.catalogEntries,
+        )..where((row) => row.barcode.equals('048121184117'))).getSingleOrNull();
+        expect(cached?.name, 'Original English Muffins');
+        expect(cached?.category, 'bakery');
+      },
+    );
+
+    test(
+      'a past purchase (any list, active or archived) whose name plausibly '
+      'matches a new item is cached by its exact historical barcode, '
+      'before the external search even runs — a person buying the same '
+      'product again should resolve it with zero network calls',
+      () async {
+        final seededList = await database.select(database.shoppingLists).getSingle();
+        final archivedList = await database
+            .into(database.shoppingLists)
+            .insert(
+              ShoppingListsCompanion.insert(
+                name: 'Old Trip',
+                status: ShoppingListStatus.archived,
+              ),
+            );
+        await database
+            .into(database.basketEntries)
+            .insert(
+              BasketEntriesCompanion.insert(
+                listId: archivedList,
+                productName: 'Original English Muffins',
+                barcode: const Value('048121184117'),
+              ),
+            );
+        final fakeExternal = _FakeProductLookupService();
+        final service = BasketService(
+          database,
+          seededList.id,
+          productLookup: fakeExternal,
+        );
+        await _flushMicrotasks();
+
+        final foundCount = await service.lookUpAndCacheBarcodes([
+          (name: "Thomas's English Mufins", category: 'bakery'),
+        ]);
+
+        expect(foundCount, 1);
+        final cached = await (database.select(
+          database.catalogEntries,
+        )..where((row) => row.barcode.equals('048121184117'))).getSingleOrNull();
+        expect(cached?.name, 'Original English Muffins');
+        expect(cached?.category, 'bakery');
+      },
+    );
+
+    test(
+      'a past purchase with no plausible name relationship to the new '
+      'item is not cached as a false match',
+      () async {
+        final seededList = await database.select(database.shoppingLists).getSingle();
+        await database
+            .into(database.basketEntries)
+            .insert(
+              BasketEntriesCompanion.insert(
+                listId: seededList.id,
+                productName: 'Frozen Pizza',
+                barcode: const Value('000111222333'),
+              ),
+            );
+        final service = BasketService(
+          database,
+          seededList.id,
+          productLookup: _FakeProductLookupService(),
+        );
+        await _flushMicrotasks();
+
+        final foundCount = await service.lookUpAndCacheBarcodes([
+          (name: 'Orange Juice', category: 'beverages'),
+        ]);
+
+        expect(foundCount, 0);
+        final cached = await (database.select(
+          database.catalogEntries,
+        )..where((row) => row.barcode.equals('000111222333'))).getSingleOrNull();
+        expect(cached, isNull);
+      },
+    );
+
+    test(
+      'adding a planned item also checks history first, via the same '
+      'background lookup as the external search (PLOOKUP-3)',
+      () async {
+        final seededList = await database.select(database.shoppingLists).getSingle();
+        await database
+            .into(database.basketEntries)
+            .insert(
+              BasketEntriesCompanion.insert(
+                listId: seededList.id,
+                productName: 'Original English Muffins',
+                barcode: const Value('048121184117'),
+              ),
+            );
+        final service = BasketService(
+          database,
+          seededList.id,
+          productLookup: _FakeProductLookupService(),
+        );
+        await _flushMicrotasks();
+
+        await service.addPlannedItem(
+          "Thomas's English Mufins",
+          category: 'bakery',
+        );
+        await _flushMicrotasks();
+
+        final cached = await (database.select(
+          database.catalogEntries,
+        )..where((row) => row.barcode.equals('048121184117'))).getSingleOrNull();
+        expect(cached?.name, 'Original English Muffins');
       },
     );
   });

@@ -104,9 +104,10 @@ class ProductResolutionService {
       );
     }
 
-    final historical = await (_database.select(
+    final historicalMatches = await (_database.select(
       _database.basketEntries,
-    )..where((row) => row.barcode.equals(barcode))).getSingleOrNull();
+    )..where((row) => row.barcode.isIn(BarcodeLookupService.variantsOf(barcode)))).get();
+    final historical = historicalMatches.isEmpty ? null : historicalMatches.first;
     if (historical != null) {
       await _promoteToCatalog(barcode, historical.productName);
       return ResolvedProduct(

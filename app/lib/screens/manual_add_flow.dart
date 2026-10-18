@@ -58,6 +58,7 @@ Future<void> showManualAddFlow({
         builder: (context) => MatchConfirmationDialog(
           productName: name,
           candidates: result.candidates,
+          allPendingItems: basketService.pendingItems,
         ),
       );
     case MatchOutcome.none:

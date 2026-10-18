@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 
 import '../data/database.dart';
+import 'product_lookup_service.dart';
 
 /// Holds one shopping list's items and basket, backed by [AppDatabase]
 /// (SYNC-1), and notifies listeners when either changes.
@@ -20,14 +21,17 @@ import '../data/database.dart';
 /// UREQS: LIST-2, LIST-4, LIST-5, LSTORG-1, LSTORG-2, SYNC-1
 class BasketService extends ChangeNotifier {
   /// Creates the service for [listId] and loads current state from
-  /// [_database].
+  /// [_database]. [productLookup] is injectable for testing; production
+  /// code omits it and gets a real [ProductLookupService].
   ///
   /// UREQS: LSTORG-1, SYNC-1
-  BasketService(this._database, this.listId) {
+  BasketService(this._database, this.listId, {ProductLookupService? productLookup})
+    : _productLookup = productLookup ?? ProductLookupService() {
     unawaited(_reload());
   }
 
   final AppDatabase _database;
+  final ProductLookupService _productLookup;
 
   /// The shopping list this service's items/basket belong to.
   ///
@@ -58,7 +62,16 @@ class BasketService extends ChangeNotifier {
   /// Adds a planned item to the list itself (not the basket) — e.g.
   /// entered at home before a trip, independent of scanning.
   ///
-  /// UREQS: LSTORG-2
+  /// Also kicks off [lookUpAndCacheBarcodes] for this one item in the
+  /// background (not awaited, so adding the item itself isn't blocked on a
+  /// network round-trip): looking up a real barcode now, while there's
+  /// likely connectivity at home, means in-store scanning of the actual
+  /// product later can resolve it from the local catalog alone, with no
+  /// network call — PLOOKUP-1's "Check Products" action still exists as a
+  /// manual catch-up for items added before this existed (e.g. seed data)
+  /// or added while offline.
+  ///
+  /// UREQS: LSTORG-2, PLOOKUP-3
   Future<void> addPlannedItem(
     String name, {
     String category = 'other',
@@ -76,6 +89,39 @@ class BasketService extends ChangeNotifier {
           ),
         );
     await _reload();
+    unawaited(lookUpAndCacheBarcodes([(name: name, category: category)]));
+  }
+
+  /// Searches external open product databases for each of [items] by name
+  /// and caches any candidate barcodes found into the local shared catalog
+  /// (PLOOKUP-1), so a later in-store scan of the real product resolves
+  /// from the local catalog alone. Network/parse failures are swallowed
+  /// per-item by [ProductLookupService] itself; this never throws and
+  /// never blocks on a missing connection. Returns how many candidates
+  /// were found across all items, for a caller that wants to report a
+  /// count (e.g. the manual "Check Products" action).
+  ///
+  /// UREQS: PLOOKUP-1, PLOOKUP-3
+  Future<int> lookUpAndCacheBarcodes(
+    Iterable<({String name, String category})> items,
+  ) async {
+    var foundCount = 0;
+    for (final item in items) {
+      final candidates = await _productLookup.searchByName(item.name);
+      for (final candidate in candidates) {
+        await _database
+            .into(_database.catalogEntries)
+            .insertOnConflictUpdate(
+              CatalogEntriesCompanion.insert(
+                barcode: candidate.barcode,
+                name: candidate.name,
+                category: item.category,
+              ),
+            );
+        foundCount++;
+      }
+    }
+    return foundCount;
   }
 
   /// Adds [product] to the basket. If [matchedItem] is given, that list

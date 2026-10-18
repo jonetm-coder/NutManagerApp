@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../data/database.dart';
 import '../services/barcode_lookup_service.dart';
 import '../services/basket_service.dart';
-import '../services/product_lookup_service.dart';
 import 'manual_add_flow.dart';
 import 'price_entry_screen.dart';
 import 'scan_screen.dart';
@@ -226,28 +225,19 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
 
   /// "Check Products" (PLOOKUP-1): searches an external open product
   /// database for each pending item's name and adds any candidates found
-  /// to the local catalog, so in-store scanning has a higher hit rate.
-  /// The one explicitly-online action on this otherwise-offline screen.
+  /// to the local catalog, so in-store scanning has a higher hit rate. A
+  /// manual catch-up for items that predate [BasketService.addPlannedItem]
+  /// doing this automatically (PLOOKUP-3) or were added without
+  /// connectivity — the one explicitly-online action on this otherwise-
+  /// offline screen.
   Future<void> _checkProducts(BuildContext context) async {
     setState(() => _isCheckingProducts = true);
-    final lookup = ProductLookupService();
-    var foundCount = 0;
+    int foundCount;
     try {
-      for (final item in _basketService.pendingItems) {
-        final candidates = await lookup.searchByName(item.name);
-        for (final candidate in candidates) {
-          await widget.database
-              .into(widget.database.catalogEntries)
-              .insertOnConflictUpdate(
-                CatalogEntriesCompanion.insert(
-                  barcode: candidate.barcode,
-                  name: candidate.name,
-                  category: item.category,
-                ),
-              );
-          foundCount++;
-        }
-      }
+      foundCount = await _basketService.lookUpAndCacheBarcodes([
+        for (final item in _basketService.pendingItems)
+          (name: item.name, category: item.category),
+      ]);
     } finally {
       if (mounted) {
         setState(() => _isCheckingProducts = false);

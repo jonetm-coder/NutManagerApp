@@ -61,7 +61,7 @@ Equipment needed across all four phases. Each phase's section below states which
 
 - Equipment: EQ-D1, EQ-N3, EQ-P1, EQ-P2, EQ-P3, EQ-A2, EQ-S2, EQ-S4.
 - NutCache (EQ-N2) is **not** used in this phase — disconnect Tailscale on the test device or shut the `nutcache` VM down, to make sure nothing in Phase 1 accidentally depends on it. Being off the home Wi-Fi is not enough, since Tailscale reaches NutCache from any network.
-- MT1.11 and MT1.12 are the one explicit exception to the airplane-mode default below: they exercise PLOOKUP-1/PLOOKUP-2's external open-product-database lookups, which need genuine internet access (not NutCache, which stays disconnected per the point above). Run those two with Tailscale still off but Wi-Fi/mobile data on.
+- MT1.11, MT1.12, and MT1.13 are the explicit exceptions to the airplane-mode default below: they exercise PLOOKUP-1/PLOOKUP-2/PLOOKUP-3's external open-product-database lookups, which need genuine internet access (not NutCache, which stays disconnected per the point above). Run those with Tailscale still off but Wi-Fi/mobile data on; MT1.13 specifically switches to airplane mode partway through, by design, to confirm the earlier lookup's result is already cached locally.
 - Seed catalog (EQ-A2) populated with entries for every EQ-P1 fixture code plus the EQ-P2 real products, including at least one deliberate near-duplicate pair (e.g., "whole milk" and "2% milk") to exercise ambiguous matching.
 - Barcode fixtures (EQ-P1) generated once via EQ-S4 and committed to `app/test/fixtures/barcodes/`; printed copies made from the same files.
 
@@ -93,6 +93,7 @@ Equipment needed across all four phases. Each phase's section below states which
 | PRICE-10 | Recognize per-unit vs. total price | AT1.9, MT1.10 |
 | PLOOKUP-1 | "Check Products": external lookup by name to pre-populate catalog | MT1.11 |
 | PLOOKUP-2 | Scan-to-add from home via local/history/external resolution waterfall | AT1.10, MT1.12 |
+| PLOOKUP-3 | Automatic background barcode lookup/cache when an item is added to a list | AT1.11, MT1.13 |
 
 ### Automated Test Cases
 
@@ -108,6 +109,7 @@ Equipment needed across all four phases. Each phase's section below states which
 | AT1.8 | List organization, pure logic: creating a second named list leaves both active (LSTORG-1); archiving a list removes it from the active set, adds an archive timestamp, and leaves other lists untouched (LSTORG-4); a planned item defaults to quantity 1 and its planned quantity updates independently of a matched basket entry's actual quantity (LSTORG-2, LSTORG-3). | Unit |
 | AT1.9 | Price-tag text parsing (`PriceOcrService.parseText`), pure logic, no camera: a flat total with no unit marker, a per-unit price with a unit marker (e.g. "/lb"), a tag showing both, unit-word normalization, and text with no recognizable price (PRICE-10). | Unit |
 | AT1.10 | Scan-to-add resolution waterfall (`ProductResolutionService`), with a stubbed external-lookup service so no network call occurs: a barcode already in the local catalog resolves there without reaching the external tier; a barcode seen in a past basket entry (any list) resolves via history and is promoted into the catalog; a barcode unknown locally falls through to the (stubbed) external lookup and is promoted into the catalog; a barcode missing from all three tiers resolves to `null` (PLOOKUP-2). | Unit |
+| AT1.11 | `BasketService.addPlannedItem`, with a stubbed external-lookup service: adding a planned item fires a background lookup by that item's name and caches any candidate barcode found into the local catalog, without blocking the add itself; `lookUpAndCacheBarcodes` (the "Check Products" action's underlying method) returns an accurate found-count across multiple items passed to it directly (PLOOKUP-3). | Unit |
 
 ### Manual Test Cases
 
@@ -127,12 +129,13 @@ Run on EQ-D1 with NutCache unreachable (per Setup, above) unless stated otherwis
 | MT1.10 | On a basket item, scan a real shelf price tag (per-pound, if available) and separately enter a price manually. | Price is captured and shown, with a per-pound price kept distinct from a flat total (PRICE-1, PRICE-2, PRICE-3, PRICE-10); nothing is saved until confirmed. |
 | MT1.11 | With connectivity available, tap "Check Products" on a list with an item not yet in the local catalog. | App queries the external open product database and candidate products are added to the local catalog for that item. |
 | MT1.12 | With connectivity available, use "Scan to Add" from the Shopping Lists screen (not from inside any specific list) to scan a product barcode not already in the local catalog. | The product is identified (via history or external lookup) or, failing that, the app asks for a name; either way the user is then asked which list to add it to. |
+| MT1.13 | With connectivity available, add a planned item to a list for a real product you have at home (e.g. "Thomas's English Muffins"), wait a few seconds, then disable connectivity (airplane mode) and use the regular in-list "Scan" button (not "Scan to Add") on the real product. | The item resolves correctly from the local catalog with no network call — confirming PLOOKUP-3's background lookup populated the catalog in time, fixing the gap where in-store scanning (local-catalog-only by design) never found a real product that had only ever existed as fake seed data. |
 
 ### Exit Criteria
 
-- AT1.1–AT1.10 all passing; MT1.1–MT1.12 executed once on EQ-D1 with no failures.
-- Any Should Have requirement not completed (LIST-5, LIST-6, PLOOKUP-1, PLOOKUP-2) is explicitly logged as carried into Phase 2, not silently dropped.
-- PLOOKUP-1/PLOOKUP-2 query external product databases directly from the phone — a deliberate interim architecture tracked in [docs/nutcache_migration_debt.md](nutcache_migration_debt.md) (MIGRATE-1), not a gap to fix as part of this phase's exit criteria.
+- AT1.1–AT1.11 all passing; MT1.1–MT1.13 executed once on EQ-D1 with no failures.
+- Any Should Have requirement not completed (LIST-5, LIST-6, PLOOKUP-1, PLOOKUP-2, PLOOKUP-3) is explicitly logged as carried into Phase 2, not silently dropped.
+- PLOOKUP-1/PLOOKUP-2/PLOOKUP-3 query external product databases directly from the phone — a deliberate interim architecture tracked in [docs/nutcache_migration_debt.md](nutcache_migration_debt.md) (MIGRATE-1), not a gap to fix as part of this phase's exit criteria.
 
 ---
 

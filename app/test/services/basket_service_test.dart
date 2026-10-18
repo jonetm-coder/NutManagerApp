@@ -2,8 +2,20 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nut_manager_app/data/database.dart';
 import 'package:nut_manager_app/services/basket_service.dart';
+import 'package:nut_manager_app/services/product_lookup_service.dart';
 
 Future<void> _flushMicrotasks() => Future<void>.delayed(Duration.zero);
+
+/// Returns no candidates — keeps [BasketService.addPlannedItem]'s
+/// background barcode lookup (PLOOKUP-3) from making a real network call
+/// during these tests.
+class _FakeProductLookupService extends ProductLookupService {
+  @override
+  Future<List<ExternalProductCandidate>> searchByName(
+    String name, {
+    int limit = 10,
+  }) async => const [];
+}
 
 void main() {
   // AT1.5: basket state transitions — add via scan, add manually, remove
@@ -18,7 +30,11 @@ void main() {
       // let that finish before reading the seeded list's id.
       await _flushMicrotasks();
       final seededList = await database.select(database.shoppingLists).getSingle();
-      service = BasketService(database, seededList.id);
+      service = BasketService(
+        database,
+        seededList.id,
+        productLookup: _FakeProductLookupService(),
+      );
       // Likewise for the service's own constructor-triggered reload.
       await _flushMicrotasks();
     });

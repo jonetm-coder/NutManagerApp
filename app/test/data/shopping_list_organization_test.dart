@@ -3,8 +3,38 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nut_manager_app/data/database.dart';
 import 'package:nut_manager_app/services/basket_service.dart';
+import 'package:nut_manager_app/services/product_lookup_service.dart';
 
 Future<void> _flushMicrotasks() => Future<void>.delayed(Duration.zero);
+
+/// Returns no candidates — keeps [BasketService.addPlannedItem]'s
+/// background barcode lookup (PLOOKUP-3) from making a real network call
+/// during these tests.
+class _FakeProductLookupService extends ProductLookupService {
+  @override
+  Future<List<ExternalProductCandidate>> searchByName(
+    String name, {
+    int limit = 10,
+  }) async => const [];
+}
+
+/// Returns one fixed candidate for any search — used to verify a found
+/// candidate actually gets cached into the local catalog.
+class _StubProductLookupService extends ProductLookupService {
+  _StubProductLookupService(this._candidate);
+
+  final ExternalProductCandidate _candidate;
+  final List<String> searchedNames = [];
+
+  @override
+  Future<List<ExternalProductCandidate>> searchByName(
+    String name, {
+    int limit = 10,
+  }) async {
+    searchedNames.add(name);
+    return [_candidate];
+  }
+}
 
 Future<List<ShoppingList>> _activeLists(AppDatabase database) {
   return (database.select(
@@ -96,7 +126,11 @@ void main() {
       'quantity (LSTORG-2, LSTORG-3)',
       () async {
         final seededList = await database.select(database.shoppingLists).getSingle();
-        final service = BasketService(database, seededList.id);
+        final service = BasketService(
+          database,
+          seededList.id,
+          productLookup: _FakeProductLookupService(),
+        );
         await _flushMicrotasks();
 
         await service.addPlannedItem('Bananas');
@@ -122,6 +156,69 @@ void main() {
           service.listItems.firstWhere((i) => i.id == planned.id).quantity,
           3,
         );
+      },
+    );
+
+    test(
+      'adding a planned item looks up and caches a candidate barcode into '
+      'the local catalog in the background, so a later in-store scan of '
+      'the real product can resolve purely offline (PLOOKUP-3) — the fix '
+      'for the bug where the in-list Scan button never found a real '
+      'product because nothing had ever populated the local catalog for it',
+      () async {
+        final seededList = await database.select(database.shoppingLists).getSingle();
+        final stubLookup = _StubProductLookupService(
+          const ExternalProductCandidate(
+            barcode: '0048121102081',
+            name: "Thomas's English Muffins",
+          ),
+        );
+        final service = BasketService(
+          database,
+          seededList.id,
+          productLookup: stubLookup,
+        );
+        await _flushMicrotasks();
+
+        await service.addPlannedItem(
+          "Thomas's English Mufins",
+          category: 'bakery',
+        );
+        // addPlannedItem fires the lookup unawaited; give it a chance to
+        // complete before asserting on its side effect.
+        await _flushMicrotasks();
+
+        expect(stubLookup.searchedNames, ["Thomas's English Mufins"]);
+        final cached = await (database.select(
+          database.catalogEntries,
+        )..where((row) => row.barcode.equals('0048121102081'))).getSingleOrNull();
+        expect(cached?.name, "Thomas's English Muffins");
+        expect(cached?.category, 'bakery');
+      },
+    );
+
+    test(
+      'lookUpAndCacheBarcodes (the "Check Products" action) returns how '
+      'many candidates were found across all items passed to it',
+      () async {
+        final seededList = await database.select(database.shoppingLists).getSingle();
+        final stubLookup = _StubProductLookupService(
+          const ExternalProductCandidate(barcode: '000000000001', name: 'Milk'),
+        );
+        final service = BasketService(
+          database,
+          seededList.id,
+          productLookup: stubLookup,
+        );
+        await _flushMicrotasks();
+
+        final foundCount = await service.lookUpAndCacheBarcodes([
+          (name: 'Milk', category: 'dairy'),
+          (name: 'Eggs', category: 'dairy'),
+        ]);
+
+        expect(foundCount, 2);
+        expect(stubLookup.searchedNames, ['Milk', 'Eggs']);
       },
     );
   });

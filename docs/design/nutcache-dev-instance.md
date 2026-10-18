@@ -45,13 +45,13 @@ Rather than installing the backend stand-in directly on Hooper's host OS:
 | Hypervisor/tooling | libvirt 9.0 + QEMU 7.2 with KVM (Debian 12 packages), UEFI boot (AAVMF) |
 | Guest OS | Debian 12 (arm64) official `genericcloud` image, checksum-verified against Debian's `SHA512SUMS` |
 | vCPUs | 2 (of Hooper's 4), `host-passthrough` CPU model |
-| RAM | 3 GB. Hooper has only ~100 MB of swap, so this cap is what protects Hooper's other services from the OOM killer. The Firestore emulator's JVM heap is also capped inside the VM so it can't balloon to the VM's limit. **Caveat:** Hooper's kernel has the memory cgroup controller disabled (the Raspberry Pi default), so libvirt can't additionally cap QEMU's own overhead (~100-200 MB on top of guest RAM). Guest RAM itself can't exceed 3 GB regardless. Enabling the controller would mean editing the kernel command line that also carries the root-drive unlock settings; deliberately not done. |
+| RAM | 3 GB. Hooper has only ~100 MB of swap, so this cap is what protects Hooper's other services from the OOM killer. Inside the VM, the Firestore emulator's JVM heap is capped by Java's default (1/4 of RAM, ~750 MB); no explicit `-Xmx` is set. **Caveat:** Hooper's kernel has the memory cgroup controller disabled (the Raspberry Pi default), so libvirt can't additionally cap QEMU's own overhead (~100-200 MB on top of guest RAM). Guest RAM itself can't exceed 3 GB regardless. Enabling the controller would mean editing the kernel command line that also carries the root-drive unlock settings; deliberately not done. |
 | Disk | 32 GB thin-provisioned `qcow2` (keeps snapshots available) at `/mnt/netstorage/nutcache/nutcache.qcow2` |
 | Network | libvirt `default` NAT network (`192.168.122.0/24`), with a DHCP reservation pinning the VM to `192.168.122.10`. The virtio NIC's option ROM is disabled (`<rom enabled='no'/>`): QEMU on arm64 otherwise fails looking for an x86 iPXE ROM the guest never uses. |
 | Admin access | SSH from Hooper only: `ssh nutcache` (alias in Hooper's `~/.ssh/config`) as user `tjones`, key `~/.ssh/id_nutcache`. Password login disabled; the account has passwordless sudo (see SEC-7 in [securing_nuts.md](../securing_nuts.md)). |
 | First-boot setup | cloud-init from a NoCloud seed ISO (`/mnt/netstorage/nutcache/user-data`, `meta-data`, `seed.iso`), then **disabled** (`/etc/cloud/cloud-init.disabled`). Without that, cloud-init treats each later boot as a new instance once the seed is ejected: it regenerates SSH host keys, creates a default `debian` user, and stalls boot ~5 minutes probing cloud metadata services. |
-| Guest software | Java 21 (required by the Firestore emulator), Node.js LTS, `firebase-tools`, Tailscale, `qemu-guest-agent` |
-| Emulators run as | A systemd service inside the VM, started at boot |
+| Guest software | Java 21 (Eclipse Temurin; required by `firebase-tools`, and Debian 12 only ships 17), Node.js 22 LTS (NodeSource; a supported Cloud Functions runtime), `firebase-tools` pinned to an exact version, Tailscale, `qemu-guest-agent`. Installed by [`nutcache/dev-instance/provision-vm.sh`](../../nutcache/dev-instance/provision-vm.sh). |
+| Emulators run as | `nutcache-emulators.service` inside the VM, as the unprivileged `nutcache` user, started at boot. About 20 s to ready on a restart, and about 1¾ minutes after a cold VM boot. See [`nutcache/README.md`](../../nutcache/README.md). |
 
 ## Build Status
 
@@ -60,7 +60,7 @@ Rather than installing the backend stand-in directly on Hooper's host OS:
 | Hooper full OS upgrade (prerequisite) | Done 2026-10-18 |
 | libvirt + QEMU/KVM installed, NAT network up | Done 2026-10-18 |
 | `nutcache` VM created; boot guard unit; stop/start cycle tested | Done 2026-10-18 |
-| Emulators (Java, Node, `firebase-tools`) and repo config | Not started |
+| Emulators (Java, Node, `firebase-tools`) and repo config in `nutcache/` | Done 2026-10-18. Auth, Firestore, Storage and UI running; deny-all rules verified (client read → 403); state survives both a service restart and a full VM shutdown/boot. Functions not configured until the first function exists. |
 | Tailscale in the VM (`tag:nutcache`) and tailnet policy | Not started. Needs the owner to update the tailnet policy and issue a tagged auth key. |
 | VM firewall (nftables) | Not started |
 | Scheduled backups to `/mnt/backup/nutcache/` | Not started |
@@ -71,7 +71,7 @@ Hooper boots from a 58 GB SD card. Everything write-heavy for NutCache lives on 
 
 - **External drive layout:** a 4.5 TB USB drive, LUKS-encrypted, holding an LVM volume group with two volumes: `/mnt/netstorage` (3.5 TB, general data) and `/mnt/backup` (1 TB, backups). There's no unallocated space in the volume group, and none is needed — NutCache uses directories on the existing volumes rather than its own logical volume.
 - **VM disk image:** `/mnt/netstorage/nutcache/nutcache.qcow2`. The downloaded base image is kept alongside in `images/`.
-- **Emulator data:** the emulators hold state in memory and start empty unless told otherwise. They're run with `--import` from, and `--export-on-exit` to, a data directory on the VM's disk, so state survives a clean restart.
+- **Emulator data:** the emulators hold state in memory and start empty unless told otherwise. They're run with `--import` from, and `--export-on-exit` to, `/var/lib/nutcache/emulator-data` on the VM's disk, so state survives a clean restart. systemd stops them with SIGINT, which triggers the export. That includes the VM's ACPI shutdown when Hooper shuts down (tested).
 - **Backups:** a scheduled job on Hooper triggers an export inside the VM and copies it to `/mnt/backup/nutcache/`, keeping a rolling set of recent snapshots. This also bounds data loss after an unclean shutdown (power loss skips `--export-on-exit`) to the time since the last scheduled export.
 - **Boot-order safeguard:** the external drive is unlocked at boot from a key file and mounted with `nofail`, so Hooper still boots if the drive is missing or fails to unlock — in which case `/mnt/netstorage` is just an empty directory on the SD card. The VM is therefore **not** started with libvirt's plain autostart; it's started by `/etc/systemd/system/nutcache-vm.service` (on Hooper) with `RequiresMountsFor=/mnt/netstorage/nutcache`, so it only starts when the real drive is mounted and never silently writes a fresh VM onto the SD card. The same unit does a clean ACPI shutdown when Hooper shuts down (waiting up to 5 minutes, so the emulators can export), ordered before the drive is unmounted. `libvirt-guests` is explicitly set to `ON_BOOT=ignore` and `ON_SHUTDOWN=shutdown` in `/etc/default/libvirt-guests`, so it can neither start the VM behind the unit's back nor save its 3 GB of RAM to the SD card.
 

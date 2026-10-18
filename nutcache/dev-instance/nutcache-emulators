@@ -1,0 +1,17 @@
+#!/bin/sh
+# Starts the Firebase Local Emulator Suite for the NutCache dev instance.
+# Installed in the nutcache VM as /usr/local/bin/nutcache-emulators; run by nutcache-emulators.service.
+#
+# State lives in memory while running. It's loaded from DATA at start (if a previous export exists)
+# and written back to DATA on a clean stop (SIGINT from systemd).
+set -eu
+
+CONF=/opt/nutcache/config
+DATA=/var/lib/nutcache/emulator-data
+
+cd "$CONF"
+set -- --project demo-nutcache --export-on-exit="$DATA"
+if [ -f "$DATA/firebase-export-metadata.json" ]; then
+  set -- "$@" --import="$DATA"
+fi
+exec firebase emulators:start "$@"

@@ -1,0 +1,30 @@
+# NutCache dev instance: Firebase Local Emulator Suite.
+# Installed in the nutcache VM as /etc/systemd/system/nutcache-emulators.service.
+# See docs/design/nutcache-dev-instance.md.
+[Unit]
+Description=NutCache dev: Firebase Local Emulator Suite
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=nutcache
+Group=nutcache
+Environment=HOME=/var/lib/nutcache
+# No JVM heap flag: Java's default max heap is 1/4 of RAM (~750 MB in this 3 GB VM), which is the cap
+# we want. JAVA_TOOL_OPTIONS would also make every JVM print a notice that firebase-tools reports as a
+# rules runtime error.
+Environment=NO_UPDATE_NOTIFIER=1
+ExecStart=/usr/local/bin/nutcache-emulators
+# SIGINT to firebase-tools only, so it can run --export-on-exit and stop its own children.
+KillSignal=SIGINT
+KillMode=mixed
+TimeoutStopSec=120
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

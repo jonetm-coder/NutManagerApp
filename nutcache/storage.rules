@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// NutCache Cloud Storage security rules.
+//
+// Deny-all placeholder until a feature actually stores files (e.g. label/price-tag/coupon images in
+// later phases). See SEC-1 in docs/securing_nuts.md.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

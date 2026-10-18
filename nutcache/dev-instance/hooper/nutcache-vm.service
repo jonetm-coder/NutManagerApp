@@ -1,0 +1,20 @@
+[Unit]
+Description=NutCache dev VM (libvirt domain "nutcache")
+Documentation=https://github.com/jonetm-coder/NutManagerApp/blob/main/docs/design/nutcache-dev-instance.md
+# Only start when the external drive holding the VM disk is really mounted. It's mounted nofail, so
+# without this the VM could start against an empty directory on the SD card.
+RequiresMountsFor=/mnt/netstorage/nutcache
+Requires=libvirtd.service
+After=libvirtd.service libvirt-guests.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'virsh -c qemu:///system domstate nutcache | grep -qx running || virsh -c qemu:///system start nutcache'
+# Clean ACPI shutdown so the emulators inside get to run --export-on-exit; wait up to 5 minutes.
+ExecStop=/bin/sh -c 'virsh -c qemu:///system shutdown nutcache; for i in $(seq 1 60); do virsh -c qemu:///system domstate nutcache | grep -qx "shut off" && exit 0; sleep 5; done; echo "nutcache did not shut down in time" >&2; exit 1'
+TimeoutStopSec=330
+
+[Install]
+WantedBy=multi-user.target
